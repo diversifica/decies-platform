@@ -2,13 +2,14 @@
 DECIES Platform - FastAPI Main Application
 Sprint 0 - Día 1: Health endpoint only
 """
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="DECIES API",
     description="Sistema de análisis y recomendaciones pedagógicas adaptativas",
-    version="0.1.0"
+    version="0.1.0",
 )
 
 # CORS middleware
@@ -27,7 +28,7 @@ def root():
     return {
         "message": "DECIES Platform API",
         "version": "0.1.0",
-        "status": "running"
+        "status": "running",
     }
 
 
