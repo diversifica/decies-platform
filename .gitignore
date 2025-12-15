@@ -47,10 +47,26 @@ yarn-error.log*
 *.swo
 *~
 
-# Environment
+# Environment - CRITICAL: NEVER COMMIT SECRETS
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+*.env
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Secrets and API keys
+*.pem
+*.key
+*.secret
+secrets/
+.secrets/
+
 
 # Database
 *.db

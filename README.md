@@ -5,8 +5,11 @@
 ## 🚀 Inicio Rápido
 
 ```bash
-# Instalación automática
+# Instalación automática (Linux/macOS)
 ./scripts/dev-setup.sh
+
+# O en Windows (PowerShell)
+.\scripts\dev-setup.ps1
 
 # O manual
 cp .env.example .env
