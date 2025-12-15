@@ -18,23 +18,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      
+          node-version: "20"
+
       - name: Install dependencies
         working-directory: frontend
         run: npm install
-      
+
       - name: Lint
         working-directory: frontend
-        run: npm run lint
-      
+        run: |
+          if [ -d "app" ] || [ -d "pages" ]; then
+            npm run lint
+          else
+            echo "Skip lint: no app/ or pages/ directory yet."
+          fi
+
       - name: Test
         working-directory: frontend
         run: npm test --if-present
-      
+
       - name: Build check
         working-directory: frontend
-        run: npm run build --if-present
+        run: |
+          if [ -d "app" ] || [ -d "pages" ]; then
+            npm run build --if-present
+          else
+            echo "Skip build: no app/ or pages/ directory yet."
+          fi
