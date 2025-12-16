@@ -31,7 +31,7 @@ services:
       dockerfile: Dockerfile
     container_name: decies-backend
     environment:
-      DATABASE_URL: postgresql://decies:decies@db:5432/decies
+      DATABASE_URL: postgresql+psycopg2://decies:decies@db:5432/decies
     ports:
       - "8000:8000"
     volumes:
