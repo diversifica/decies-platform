@@ -134,6 +134,19 @@ Cerrada.
 
 ---
 
+### D-09 – Identificadores UUID como estándar
+
+**Decisión**
+Todos los identificadores primarios (PK) de entidades de dominio serán UUID.
+
+**Motivo**
+Alineación con el diseño de Sprint 1, escalabilidad, seguridad (no enumeración) y consistencia en contratos API.
+
+**Estado**
+Cerrada.
+
+---
+
 ## 4. Supuestos clave (pendientes de validar)
 
 ### S-01 – Las métricas definidas son suficientes

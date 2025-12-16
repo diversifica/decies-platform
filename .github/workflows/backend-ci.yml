@@ -16,6 +16,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: decies
+          POSTGRES_USER: decies
+          POSTGRES_PASSWORD: decies
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -46,8 +60,14 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+      - name: Apply migrations
+        working-directory: backend
+        run: |
+          . .venv/bin/activate
+          DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" uv run alembic upgrade head
+
       - name: Run tests
         working-directory: backend
         run: |
           . .venv/bin/activate
-          uv run pytest -q
+          DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" uv run pytest -q

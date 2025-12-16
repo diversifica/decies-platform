@@ -25,4 +25,4 @@ def get_db() -> Iterator[Session]:
         db.close()
 
 
-from app.models import role, student, subject, user  # noqa: E402,F401,I001
+from app.models import content, role, student, subject, term, topic, tutor, user  # noqa: E402,F401,I001

@@ -10,6 +10,7 @@ dependencies = [
     "psycopg2-binary>=2.9.9",
     "pydantic>=2.5.3",
     "pydantic-settings>=2.1.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "ruff>=0.1.0",
+    "httpx>=0.27.0",
 ]
 
 [build-system]
@@ -36,7 +38,7 @@ target-version = "py312"
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-"alembic/versions/*.py" = ["F401"]
+"alembic/versions/*.py" = ["F401", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
