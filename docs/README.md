@@ -4,6 +4,11 @@ Bienvenido a la documentación técnica y de producto de **DECIES** (sistema de 
 
 ## 📚 Índice de Documentación
 
+### Product
+- [Product Overview](product/product-overview.md)
+
+### Technical
+
 ### 00 - Fundación
 - [00 - The DECIES Principle](00_fundacion/00_The_DECIES_Principle_V1.md)
 - [00A - Índice de Documentación](00_fundacion/00A_Indice_Documentacion_DECIES.md)
@@ -22,7 +27,7 @@ Bienvenido a la documentación técnica y de producto de **DECIES** (sistema de 
 - Milestone tracking
 
 ### 04 - Stack Técnico
-- [16 - Stack Técnico Concreto y Tareas Ejecutables](04_stack_tecnico/16_Stack_Tecnico_Concreto_y_Tareas_Ejecutables_V1.md)
+- [16 - Stack Técnico Concreto y Tareas Ejecutables](technical/04_stack_tecnico/16_Stack_Tecnico_Concreto_y_Tareas_Ejecutables_V1.md)
 
 ### 05 - Calidad
 - Testing strategy
@@ -64,7 +69,7 @@ Lee el prompt correspondiente a tu área de trabajo:
 
 ### 3️⃣ Arquitectura Técnica
 Entiende el stack y decisiones técnicas:
-- 🏗️ [04 - Stack Técnico Concreto](04_stack_tecnico/16_Stack_Tecnico_Concreto_y_Tareas_Ejecutables_V1.md)
+- 🏗️ [04 - Stack Técnico Concreto](technical/04_stack_tecnico/16_Stack_Tecnico_Concreto_y_Tareas_Ejecutables_V1.md)
   - Tecnologías elegidas y justificación
   - Sprint 0 y Sprint 1 desglosados
   - Decisiones técnicas explícitas
@@ -81,9 +86,9 @@ Consulta las guías de contribución:
 **Contrato de documentación:**
 
 1. ✅ **Todo cambio de arquitectura** requiere PR que actualice docs/
-2. ✅ **Nuevas métricas o reglas** deben documentarse en 02_diseno_sistema/
+2. ✅ **Nuevas métricas o reglas** deben documentarse en technical/02_diseno_sistema/
 3. ✅ **Decisiones técnicas importantes** van a 07_gobierno/ (ADRs)
-4. ✅ **Sprint completado** implica actualizar 06_sprints/ con retrospectiva
+4. ✅ **Sprint completado** implica actualizar technical/06_sprints/ con retrospectiva
 5. ❌ **NO documentar** implementación interna (eso va en docstrings/comentarios)
 
 **Formato:**
