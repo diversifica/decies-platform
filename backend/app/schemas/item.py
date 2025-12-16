@@ -1,0 +1,22 @@
+from pydantic import BaseModel, ConfigDict
+import uuid
+from typing import List, Optional
+from app.models.item import ItemType
+
+class ItemBase(BaseModel):
+    type: ItemType
+    stem: str
+    options: Optional[List[str]] = None
+    # correct_answer should be hidden potentially if we want server-side grading
+    # But for MVP immediate feedback:
+    correct_answer: str
+    explanation: Optional[str] = None
+
+class ItemCreate(ItemBase):
+    content_upload_id: uuid.UUID
+
+class ItemResponse(ItemBase):
+    id: uuid.UUID
+    content_upload_id: uuid.UUID
+
+    model_config = ConfigDict(from_attributes=True)

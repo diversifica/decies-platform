@@ -153,3 +153,11 @@ def test_process_pipeline_success(db_session):
         items = db_session.query(Item).filter_by(content_upload_id=upload_id).all()
         assert len(items) == 2
         assert items[0].stem == "What is fun?"
+        
+        # 5. Verify GET /items Endpoint
+        response_items = client.get(f"/api/v1/content/uploads/{upload_id}/items")
+        assert response_items.status_code == 200
+        data = response_items.json()
+        assert len(data) == 2
+        assert data[0]["stem"] == "What is fun?"
+        assert "correct_answer" in data[0]
