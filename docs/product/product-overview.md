@@ -1,15 +1,19 @@
-# DECIES Platform — Product Overview
+# Product overview (public)
 
-DECIES es una plataforma que ayuda a tutores y estudiantes a detectar gaps, medir progreso y recomendar acciones pedagógicas basadas en datos.
+DECIES Platform es una plataforma de aprendizaje adaptativo orientada a estudiantes y tutores, con un enfoque en personalización basada en métricas.
 
-## Problema
-- Falta de visibilidad rápida del estado real del alumno (métricas y tendencias).
-- Recomendaciones inconsistentes o no trazables.
+Este repositorio se centra en la implementación técnica (infraestructura, backend, base de datos, CI y documentación técnica).
+La documentación estratégica de marca, posicionamiento y materiales de pitch se mantiene separada y no forma parte de este repositorio público.
 
-## Propuesta
-- Ingesta de métricas del alumno y cálculo de señales.
-- Motor de recomendaciones pedagógicas con catálogo y reglas/umbrales.
-- Panel para tutor con informes accionables.
+## Enfoque
 
-## Estado
-- Sprint 0: infraestructura (Docker + DB), backend mínimo y base para migraciones (Alembic).
+* Ingesta de contenido de estudio aportado por el tutor (por ejemplo, PDFs o imágenes).
+* Estructuración del contenido para generar práctica (tests, ejercicios, actividades).
+* Seguimiento de métricas de progreso del alumno y señales de aprendizaje para mejorar la adaptación.
+* Generación de informes y recomendaciones para el tutor.
+
+## Roles (alto nivel)
+
+* Alumno: practica y progresa mediante actividades.
+* Tutor: aporta contenido, valida progreso y registra resultados reales.
+* Admin: gestiona configuración, catálogos y control del sistema.
