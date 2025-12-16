@@ -14,27 +14,30 @@ Descripción clara de los cambios realizados.
 
 ## 🔗 Issue Relacionado
 
-Fixes #(issue)
+Fixes #(issue) o N/A
 
 ## ✅ Checklist Pre-Merge
 
 ### Código
+
 - [ ] El código sigue los estándares del proyecto
 - [ ] He realizado self-review de mi código
 - [ ] He comentado código complejo o no obvio
 - [ ] He actualizado la documentación si es necesario
 
 ### Testing
+
 - [ ] He añadido tests que prueban mis cambios
 - [ ] Todos los tests (nuevos y existentes) pasan localmente
-- [ ] `make lint` pasa sin errores
-- [ ] `make test` pasa sin errores
+- [ ] Linting y tests existentes pasan (local o CI)
 
 ### Seguridad
+
 - [ ] No he subido secretos (API keys, passwords, etc.)
 - [ ] He revisado que .env no esté en el commit
 
 ### CI/CD
+
 - [ ] CI (GitHub Actions) pasa en verde ✅
 - [ ] No hay conflictos con la branch base
 
