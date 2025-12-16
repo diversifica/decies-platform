@@ -10,7 +10,6 @@ from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item
 from app.models.knowledge import KnowledgeChunk, KnowledgeEntry
 from app.models.role import Role
-from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import AcademicYear, Term
 from app.models.tutor import Tutor
@@ -104,7 +103,7 @@ def test_process_pipeline_success(db_session):
     settings.OPENAI_API_KEY = "fake-key"
 
     # 2. Mock External Services
-    with patch("app.pipelines.processing.extract_text_from_pdf", return_value=MOCK_PDF_TEXT) as mock_extract, \
+    with patch("app.pipelines.processing.extract_text_from_pdf", return_value=MOCK_PDF_TEXT), \
          patch("app.pipelines.processing.os.path.exists", return_value=True), \
          patch("app.services.llm_service.openai.OpenAI") as mock_openai:
         
