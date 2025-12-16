@@ -10,12 +10,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.routers import content
 
 app = FastAPI(
     title="DECIES API",
-    description="Sistema de análisis y recomendaciones pedagógicas adaptativas",
+    description="Sistema de analisis y recomendaciones pedagogicas adaptativas",
     version="0.1.0",
 )
+
+app.include_router(content.router, prefix="/api/v1")
 
 # CORS middleware
 app.add_middleware(
