@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,7 +34,9 @@ class Term(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     academic_year_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id", name="terms_academic_year_id_fkey", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("academic_years.id", name="terms_academic_year_id_fkey", ondelete="CASCADE"),
+        nullable=True,
     )
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

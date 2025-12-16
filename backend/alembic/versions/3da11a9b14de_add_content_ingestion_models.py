@@ -8,9 +8,9 @@ Create Date: 2025-12-16 22:20:46.012470
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = '3da11a9b14de'
 down_revision: str | None = 'e2941b3dd56a'

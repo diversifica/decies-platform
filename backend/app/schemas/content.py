@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from fastapi import UploadFile
 from pydantic import BaseModel, ConfigDict
 
 

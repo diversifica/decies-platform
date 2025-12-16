@@ -1,6 +1,5 @@
 import os
 import uuid
-from typing import BinaryIO
 
 from fastapi import UploadFile
 

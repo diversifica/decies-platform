@@ -15,10 +15,14 @@ class Topic(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     subject_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subjects.id", name="topics_subject_id_fkey", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", name="topics_subject_id_fkey", ondelete="CASCADE"),
+        nullable=False,
     )
     term_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("terms.id", name="topics_term_id_fkey", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("terms.id", name="topics_term_id_fkey", ondelete="SET NULL"),
+        nullable=True,
     )
     code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

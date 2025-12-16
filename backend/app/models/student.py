@@ -23,7 +23,9 @@ class Student(Base):
         UUID(as_uuid=True), ForeignKey("users.id", name="students_user_id_fkey"), nullable=True
     )
     subject_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subjects.id", name="students_subject_id_fkey"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", name="students_subject_id_fkey"),
+        nullable=True,
     )
     enrollment_date: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP"), nullable=True

@@ -21,19 +21,29 @@ class ContentUpload(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     tutor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tutors.id", name="content_uploads_tutor_id_fkey", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("tutors.id", name="content_uploads_tutor_id_fkey", ondelete="CASCADE"),
+        nullable=False,
     )
     student_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("students.id", name="content_uploads_student_id_fkey", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("students.id", name="content_uploads_student_id_fkey", ondelete="SET NULL"),
+        nullable=True,
     )
     subject_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subjects.id", name="content_uploads_subject_id_fkey", ondelete="RESTRICT"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", name="content_uploads_subject_id_fkey", ondelete="RESTRICT"),
+        nullable=False,
     )
     term_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("terms.id", name="content_uploads_term_id_fkey", ondelete="RESTRICT"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("terms.id", name="content_uploads_term_id_fkey", ondelete="RESTRICT"),
+        nullable=False,
     )
     topic_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("topics.id", name="content_uploads_topic_id_fkey", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("topics.id", name="content_uploads_topic_id_fkey", ondelete="SET NULL"),
+        nullable=True,
     )
     upload_type: Mapped[ContentUploadType] = mapped_column(
         Enum(ContentUploadType, name="content_upload_type", create_type=False), nullable=False

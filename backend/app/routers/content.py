@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.tutor import Tutor
-from app.models.user import User
 from app.schemas.content import ContentUploadResponse
 from app.services.storage import StorageService
 
