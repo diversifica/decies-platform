@@ -5,7 +5,7 @@ from fastapi import UploadFile
 
 
 class StorageService:
-    STORAGE_ROOT = "/app/storage"
+    STORAGE_ROOT = "storage"
 
     @classmethod
     def save_file(cls, file: UploadFile, subfolder: str = "uploads") -> str:
