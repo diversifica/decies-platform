@@ -11,13 +11,13 @@ from app.core.db import Base
 class KnowledgeEntry(Base):
     __tablename__ = "knowledge_entries"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     content_upload_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(
-            "content_uploads.id", name="knowledge_entries_content_upload_id_fkey", ondelete="CASCADE"
+            "content_uploads.id",
+            name="knowledge_entries_content_upload_id_fkey",
+            ondelete="CASCADE",
         ),
         nullable=False,
     )
@@ -31,9 +31,7 @@ class KnowledgeEntry(Base):
 class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     knowledge_entry_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(

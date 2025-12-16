@@ -1,7 +1,16 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -107,9 +116,9 @@ def process_upload(
     # Refactoring `process_content_upload` to accept session_factory or manage its own session?
     # Or just passing `get_db` generator?
     # Simplest for now: The task connects to DB itself.
-    
+
     # I'll update `process_content_upload` to create its own session using `SessionLocal`.
-    
+
     background_tasks.add_task(run_pipeline_task, upload_id)
     return {"message": "Processing started", "upload_id": upload_id}
 
@@ -117,6 +126,7 @@ def process_upload(
 def run_pipeline_task(upload_id: uuid.UUID):
     # Wrapper to handle DB session for background task
     from app.core.db import SessionLocal
+
     db = SessionLocal()
     try:
         process_content_upload(db, upload_id)

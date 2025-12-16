@@ -52,7 +52,10 @@ class LLMService:
         response = self.client.chat.completions.create(
             model=settings.LLM_MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a helpful educational assistant. Output valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are a helpful educational assistant. Output valid JSON.",
+                },
                 {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
@@ -70,7 +73,8 @@ class LLMService:
             raise ValueError("LLM Client not configured")
 
         prompt = f"""
-        Create {quantity} assessment items (Multiple Choice or True/False) based strictly on this text.
+        Create {quantity} assessment items (Multiple Choice or True/False) 
+        based strictly on this text.
         
         Return JSON format:
         {{
@@ -99,7 +103,10 @@ class LLMService:
         response = self.client.chat.completions.create(
             model=settings.LLM_MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are an expert assessment creator. Output valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are an expert assessment creator. Output valid JSON.",
+                },
                 {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
