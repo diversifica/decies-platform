@@ -20,6 +20,7 @@ from app.services.storage import StorageService
 
 router = APIRouter(prefix="/content", tags=["content"])
 
+
 @router.post("/uploads", response_model=ContentUploadResponse, status_code=status.HTTP_201_CREATED)
 def upload_content(
     subject_id: Annotated[uuid.UUID, Form()],
@@ -34,7 +35,7 @@ def upload_content(
     # We need a Tutor in DB.
     # For Sprint 1 Day 1, we can require a "X-Tutor-ID" header temporarily if Auth not ready?
     # Or impl basic dependency.
-    
+
     # 1. Save file
     try:
         storage_uri = StorageService.save_file(file)
@@ -65,7 +66,7 @@ def upload_content(
         storage_uri=storage_uri,
         file_name=file.filename or "unknown",
         mime_type=file.content_type or "application/octet-stream",
-        page_count=0 
+        page_count=0,
     )
     db.add(db_content)
     db.commit()
@@ -73,13 +74,12 @@ def upload_content(
 
     return db_content
 
+
 @router.get("/uploads", response_model=list[ContentUploadResponse])
-def get_uploads(
-    db: Session = Depends(get_db)
-):
+def get_uploads(db: Session = Depends(get_db)):
     # Filter by Tutor...
     tutor = db.query(Tutor).first()
     if not tutor:
         return []
-    
+
     return db.query(ContentUpload).filter(ContentUpload.tutor_id == tutor.id).all()

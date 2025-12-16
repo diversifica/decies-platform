@@ -19,10 +19,10 @@ class StorageService:
         # Generate unique filename to avoid collision
         ext = file.filename.split(".")[-1] if file.filename else "bin"
         unique_name = f"{uuid.uuid4()}.{ext}"
-        
+
         full_path = os.path.join(path, unique_name)
-        
+
         with open(full_path, "wb") as f:
             f.write(file.file.read())
-            
+
         return f"{subfolder}/{unique_name}"

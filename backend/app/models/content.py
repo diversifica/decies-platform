@@ -17,9 +17,7 @@ class ContentUploadType(str, PyEnum):
 class ContentUpload(Base):
     __tablename__ = "content_uploads"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tutor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tutors.id", name="content_uploads_tutor_id_fkey", ondelete="CASCADE"),

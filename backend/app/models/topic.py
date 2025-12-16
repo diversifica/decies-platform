@@ -11,9 +11,7 @@ from app.core.db import Base
 class Topic(Base):
     __tablename__ = "topics"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subject_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subjects.id", name="topics_subject_id_fkey", ondelete="CASCADE"),
