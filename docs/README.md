@@ -88,7 +88,7 @@ Consulta las guías de contribución:
 1. ✅ **Todo cambio de arquitectura** requiere PR que actualice docs/
 2. ✅ **Nuevas métricas o reglas** deben documentarse en technical/02_diseno_sistema/
 3. ✅ **Decisiones técnicas importantes** van a 07_gobierno/ (ADRs)
-4. ✅ **Sprint completado** implica actualizar 06_sprints/ con retrospectiva
+4. ✅ **Sprint completado** implica actualizar technical/06_sprints/ con retrospectiva
 5. ❌ **NO documentar** implementación interna (eso va en docstrings/comentarios)
 
 **Formato:**
