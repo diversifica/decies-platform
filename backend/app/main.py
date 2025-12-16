@@ -3,8 +3,13 @@ DECIES Platform - FastAPI Main Application
 Sprint 0 - Día 1: Health endpoint only
 """
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.core.db import get_db
 
 app = FastAPI(
     title="DECIES API",
@@ -36,3 +41,21 @@ def root():
 def health():
     """Health check endpoint"""
     return {"status": "ok"}
+
+
+@app.get("/health/db")
+def health_db(db: Session = Depends(get_db)):
+    """Database health check endpoint"""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "error",
+                "database": "unavailable",
+                "error": str(exc),
+            },
+        ) from exc
+
+    return {"status": "ok", "db": "ok"}
