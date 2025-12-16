@@ -20,36 +20,91 @@ make dev-up
 ```
 
 **URLs:**
-- 🎨 Frontend: http://localhost:3000
-- 🔧 Backend API: http://localhost:8000/docs
+
+- 🎨 Frontend: <http://localhost:3000>
+- 🔧 Backend API: <http://localhost:8000/docs>
 - 🗄️ Database: localhost:5432
 
-## 📋 Comandos Principales
+## Inicio rápido (desarrollo local)
+
+### Requisitos
+
+- Docker Desktop (con `docker compose`)
+- Git
+
+### Levantar el entorno (Docker)
+
+#### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ps\dev-up.ps1
+```
+
+Parar:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ps\dev-down.ps1
+```
+
+Lint backend:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ps\lint-backend.ps1
+```
+
+Tests backend:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ps\test-backend.ps1
+```
+
+#### Linux/Mac
 
 ```bash
-make help          # Ver todos los comandos disponibles
-make dev-up        # Iniciar entorno de desarrollo
-make dev-down      # Detener servicios
-make test          # Ejecutar tests
-make lint          # Ejecutar linters
-make db-reset      # Resetear base de datos
+make dev-up
 ```
+
+Parar:
+
+```bash
+make dev-down
+```
+
+Lint backend:
+
+```bash
+make lint-backend
+```
+
+Tests backend:
+
+```bash
+make test-backend
+```
+
+### Healthchecks
+
+- Backend: `GET http://localhost:8000/health`
+- DB: `GET http://localhost:8000/health/db`
 
 ## 🏗️ Stack Tecnológico
 
 ### Backend
+
 - **Python 3.12** + **FastAPI**
 - **PostgreSQL 15** + SQLAlchemy 2.x + Alembic
 - **LLM Integration:** LangChain + OpenAI/Gemini
 - **Testing:** Pytest + pytest-cov
 
 ### Frontend  
+
 - **Next.js 14** (App Router)
 - **React 18** + TypeScript
 - **React Query** para estado del servidor
 - **Testing:** Vitest + Testing Library
 
 ### Infraestructura
+
 - **Docker** + Docker Compose
 - **GitHub Actions** (CI/CD)
 - **uv/Poetry** para gestión de dependencias Python
