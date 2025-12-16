@@ -1,12 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.tutor import Tutor
+from app.pipelines.processing import process_content_upload
 from app.schemas.content import ContentUploadResponse
 from app.services.storage import StorageService
 
@@ -83,3 +84,41 @@ def get_uploads(db: Session = Depends(get_db)):
         return []
 
     return db.query(ContentUpload).filter(ContentUpload.tutor_id == tutor.id).all()
+
+
+@router.post("/uploads/{upload_id}/process", status_code=status.HTTP_202_ACCEPTED)
+def process_upload(
+    upload_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Triggers the LLM pipeline (E2 + E4) for the given upload_id.
+    """
+    # Verify existence
+    upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    # Ensure running in background (for Day 2 Smoke Check simplicity)
+    # Note: We pass a new DB session or handle session within the task.
+    # Passing 'db' directly to background task is RISKY if the request session closes.
+    # Ideally, the background task opens its own session.
+    # Refactoring `process_content_upload` to accept session_factory or manage its own session?
+    # Or just passing `get_db` generator?
+    # Simplest for now: The task connects to DB itself.
+    
+    # I'll update `process_content_upload` to create its own session using `SessionLocal`.
+    
+    background_tasks.add_task(run_pipeline_task, upload_id)
+    return {"message": "Processing started", "upload_id": upload_id}
+
+
+def run_pipeline_task(upload_id: uuid.UUID):
+    # Wrapper to handle DB session for background task
+    from app.core.db import SessionLocal
+    db = SessionLocal()
+    try:
+        process_content_upload(db, upload_id)
+    finally:
+        db.close()
