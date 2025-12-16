@@ -60,18 +60,18 @@ def upload_content(
     if tutor_id:
         target_tutor = db.query(Tutor).filter(Tutor.id == tutor_id).first()
         if not target_tutor:
-             raise HTTPException(status_code=404, detail=f"Tutor {tutor_id} not found")
+            raise HTTPException(status_code=404, detail=f"Tutor {tutor_id} not found")
     else:
         # Fallback to first
         target_tutor = db.query(Tutor).first()
         if not target_tutor:
             raise HTTPException(status_code=403, detail="No authenticated tutor found")
-            
+
     final_tutor_id = target_tutor.id
 
     # 3. Create DB Record
     db_content = ContentUpload(
-        tutor_id=tutor_id,
+        tutor_id=final_tutor_id,
         subject_id=subject_id,
         term_id=term_id,
         topic_id=topic_id,

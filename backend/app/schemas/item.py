@@ -1,7 +1,10 @@
-from pydantic import BaseModel, ConfigDict
 import uuid
 from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict
+
 from app.models.item import ItemType
+
 
 class ItemBase(BaseModel):
     type: ItemType
@@ -12,8 +15,10 @@ class ItemBase(BaseModel):
     correct_answer: str
     explanation: Optional[str] = None
 
+
 class ItemCreate(ItemBase):
     content_upload_id: uuid.UUID
+
 
 class ItemResponse(ItemBase):
     id: uuid.UUID
