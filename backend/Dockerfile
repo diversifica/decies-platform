@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml ./
 
 # Install dependencies from pyproject.toml
-RUN uv pip install --system --no-cache fastapi uvicorn[standard] sqlalchemy psycopg2-binary pydantic pydantic-settings
+RUN uv pip install --system --no-cache fastapi uvicorn[standard] sqlalchemy psycopg2-binary pydantic pydantic-settings alembic
 
 # Copy application code
 COPY ./app ./app

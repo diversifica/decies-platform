@@ -23,3 +23,6 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+from app.models import role, student, subject, user  # noqa: E402,F401,I001
