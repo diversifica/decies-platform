@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.content import ContentUpload, ContentUploadType
+from app.models.item import Item
 from app.models.tutor import Tutor
 from app.pipelines.processing import process_content_upload
 from app.schemas.content import ContentUploadResponse
+from app.schemas.item import ItemResponse
 from app.services.storage import StorageService
 
 # TODO: Auth dependency to get current user/tutor
@@ -38,6 +40,7 @@ def upload_content(
     upload_type: Annotated[ContentUploadType, Form()],
     file: Annotated[UploadFile, File()],
     topic_id: Annotated[uuid.UUID | None, Form()] = None,
+    tutor_id: Annotated[uuid.UUID | None, Form()] = None,
     # current_tutor: Tutor = Depends(get_current_active_tutor), # TODO
     db: Session = Depends(get_db),
 ):
@@ -52,23 +55,23 @@ def upload_content(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File storage failed: {str(e)}")
 
-    # 2. Get Tutor (Mock for now or Header)
-    # Raising error if not impl
-    # I will assume there is at least one tutor or create one via seed.
-    # For now, I'll fetch the FIRST tutor to proceed, or handle logic.
-    tutor = db.query(Tutor).first()
-    if not tutor:
-        # Create a dummy tutor/user if none exists?
-        # NO, "Tutor sube PDF". Tutor must exist.
-        # I will handle this in Verification by seeding.
-        # Here I raise 403 if no tutor found (acting as "Not Authorized").
-        raise HTTPException(status_code=403, detail="No authenticated tutor found")
+    # 2. Get Tutor
+    target_tutor = None
+    if tutor_id:
+        target_tutor = db.query(Tutor).filter(Tutor.id == tutor_id).first()
+        if not target_tutor:
+            raise HTTPException(status_code=404, detail=f"Tutor {tutor_id} not found")
+    else:
+        # Fallback to first
+        target_tutor = db.query(Tutor).first()
+        if not target_tutor:
+            raise HTTPException(status_code=403, detail="No authenticated tutor found")
 
-    tutor_id = tutor.id
+    final_tutor_id = target_tutor.id
 
     # 3. Create DB Record
     db_content = ContentUpload(
-        tutor_id=tutor_id,
+        tutor_id=final_tutor_id,
         subject_id=subject_id,
         term_id=term_id,
         topic_id=topic_id,
@@ -132,3 +135,20 @@ def run_pipeline_task(upload_id: uuid.UUID):
         process_content_upload(db, upload_id)
     finally:
         db.close()
+
+
+@router.get("/uploads/{upload_id}/items", response_model=list[ItemResponse])
+def get_upload_items(
+    upload_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Fetch all generated items for a specific upload.
+    """
+    # Verify existence
+    upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    items = db.query(Item).filter(Item.content_upload_id == upload_id).all()
+    return items
