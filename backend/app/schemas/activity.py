@@ -63,7 +63,7 @@ class ActivitySessionItemResponse(ActivitySessionItemBase):
 
 class LearningEventBase(BaseModel):
     student_id: uuid.UUID
-    session_id: uuid.UUID
+    # session_id removed from base, provided via path param for creation
     item_id: uuid.UUID
     subject_id: uuid.UUID
     term_id: uuid.UUID
@@ -85,6 +85,7 @@ class LearningEventCreate(LearningEventBase):
 
 class LearningEventResponse(LearningEventBase):
     id: uuid.UUID
+    session_id: uuid.UUID
     timestamp_start: datetime
     timestamp_end: datetime
     created_at: datetime | None
