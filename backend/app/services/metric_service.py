@@ -260,7 +260,7 @@ class MetricService:
                 existing_ms.status = ms.status
                 existing_ms.last_practice_at = ms.last_practice_at
                 existing_ms.updated_at = ms.updated_at
-                
+
                 # Update the object in our list so it has the ID
                 ms.id = existing_ms.id
             else:
