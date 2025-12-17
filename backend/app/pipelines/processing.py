@@ -9,6 +9,7 @@ from app.models.content import ContentUpload
 from app.models.item import Item, ItemType
 from app.models.knowledge import KnowledgeChunk, KnowledgeEntry
 from app.models.llm_run import LLMRun, LLMRunStep
+from app.models.microconcept import MicroConcept
 from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,30 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
     upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
     if not upload:
         raise ValueError("Upload not found")
+
+    default_microconcept = (
+        db.query(MicroConcept)
+        .filter(
+            MicroConcept.subject_id == upload.subject_id,
+            MicroConcept.term_id == upload.term_id,
+            MicroConcept.active == True,  # noqa: E712
+        )
+        .order_by(MicroConcept.created_at.asc())
+        .first()
+    )
+    if not default_microconcept:
+        default_microconcept = MicroConcept(
+            id=uuid.uuid4(),
+            subject_id=upload.subject_id,
+            term_id=upload.term_id,
+            topic_id=None,
+            code=None,
+            name="General",
+            description="Microconcepto genérico (auto)",
+            active=True,
+        )
+        db.add(default_microconcept)
+        db.flush()
 
     # Translate relative path to absolute if needed
     # (Assuming StorageService behaves consistently, here we need absolute file path to open)
@@ -129,6 +154,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
 
                 item = Item(
                     content_upload_id=upload.id,
+                    microconcept_id=default_microconcept.id,
                     type=itype,
                     stem=item_data["stem"],
                     options=item_data.get("options"),

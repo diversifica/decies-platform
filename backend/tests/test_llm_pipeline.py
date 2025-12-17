@@ -9,6 +9,7 @@ from app.main import app
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item
 from app.models.knowledge import KnowledgeChunk, KnowledgeEntry
+from app.models.microconcept import MicroConcept
 from app.models.role import Role
 from app.models.subject import Subject
 from app.models.term import AcademicYear, Term
@@ -153,6 +154,14 @@ def test_process_pipeline_success(db_session):
         items = db_session.query(Item).filter_by(content_upload_id=upload_id).all()
         assert len(items) == 2
         assert items[0].stem == "What is fun?"
+        assert all(item.microconcept_id is not None for item in items)
+
+        microconcepts = (
+            db_session.query(MicroConcept)
+            .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+            .all()
+        )
+        assert len(microconcepts) >= 1
 
         # 5. Verify GET /items Endpoint
         response_items = client.get(f"/api/v1/content/uploads/{upload_id}/items")
