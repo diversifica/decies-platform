@@ -156,7 +156,7 @@ class MetricService:
                         student_id=student_id,
                         microconcept_id=mc.id,
                         mastery_score=0.0,
-                        status="in_progress",
+                        status="at_risk",
                         last_practice_at=None,
                         updated_at=datetime.utcnow(),
                     )

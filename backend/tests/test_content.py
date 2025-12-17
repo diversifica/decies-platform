@@ -81,7 +81,12 @@ def test_upload_content_success(db_session: Session):
     # We mock the file upload
     file_content = b"fake pdf content"
     files = {"file": ("test.pdf", file_content, "application/pdf")}
-    data = {"subject_id": str(subject.id), "term_id": str(term.id), "upload_type": "pdf"}
+    data = {
+        "subject_id": str(subject.id),
+        "term_id": str(term.id),
+        "upload_type": "pdf",
+        "tutor_id": str(tutor.id),
+    }
     # Auth is mocked in router to pick first tutor.
     # So it should pick our tutor (or another if exists).
     response = client.post("/api/v1/content/uploads", files=files, data=data)
