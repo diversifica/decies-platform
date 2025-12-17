@@ -31,3 +31,15 @@ class TutorReportResponse(BaseModel):
     sections: list[TutorReportSectionResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TutorReportListItemResponse(BaseModel):
+    id: uuid.UUID
+    tutor_id: uuid.UUID
+    student_id: uuid.UUID
+    subject_id: uuid.UUID
+    term_id: uuid.UUID
+    summary: str
+    generated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
