@@ -8,7 +8,6 @@ from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.schemas.metric import (
     MasteryStateSummary,
-    MetricAggregateResponse,
     StudentMetricsSummary,
 )
 from app.services.metric_service import metric_service
@@ -40,9 +39,7 @@ def get_student_metrics(
 
     if not metric:
         # Calculate metrics if not exists
-        metric = metric_service.calculate_student_metrics(
-            db, student_id, subject_id, term_id
-        )
+        metric = metric_service.calculate_student_metrics(db, student_id, subject_id, term_id)
         db.add(metric)
         db.commit()
         db.refresh(metric)

@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.core.db import SessionLocal
+from app.main import app
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
@@ -31,7 +31,7 @@ def test_get_student_metrics(db_session):
 
     response = client.get(
         f"/api/v1/metrics/students/{student.id}/metrics",
-        params={"subject_id": str(subject.id), "term_id": str(term.id)}
+        params={"subject_id": str(subject.id), "term_id": str(term.id)},
     )
 
     assert response.status_code == 200
@@ -51,13 +51,13 @@ def test_get_mastery_states(db_session):
 
     response = client.get(
         f"/api/v1/metrics/students/{student.id}/mastery",
-        params={"subject_id": str(subject.id), "term_id": str(term.id)}
+        params={"subject_id": str(subject.id), "term_id": str(term.id)},
     )
 
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    
+
     # Should have mastery states for all microconcepts
     if len(data) > 0:
         state = data[0]
@@ -79,8 +79,8 @@ def test_recalculate_metrics(db_session):
         params={
             "student_id": str(student.id),
             "subject_id": str(subject.id),
-            "term_id": str(term.id)
-        }
+            "term_id": str(term.id),
+        },
     )
 
     assert response.status_code == 200

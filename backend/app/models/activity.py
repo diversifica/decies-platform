@@ -18,9 +18,7 @@ from app.core.db import Base
 class ActivityType(Base):
     __tablename__ = "activity_types"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -32,9 +30,7 @@ class ActivityType(Base):
 class ActivitySession(Base):
     __tablename__ = "activity_sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("students.id", name="activity_sessions_student_id_fkey"),
@@ -42,9 +38,7 @@ class ActivitySession(Base):
     )
     activity_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey(
-            "activity_types.id", name="activity_sessions_activity_type_id_fkey"
-        ),
+        ForeignKey("activity_types.id", name="activity_sessions_activity_type_id_fkey"),
         nullable=False,
     )
     subject_id: Mapped[uuid.UUID] = mapped_column(
@@ -76,14 +70,10 @@ class ActivitySession(Base):
 class ActivitySessionItem(Base):
     __tablename__ = "activity_session_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey(
-            "activity_sessions.id", name="activity_session_items_session_id_fkey"
-        ),
+        ForeignKey("activity_sessions.id", name="activity_session_items_session_id_fkey"),
         nullable=False,
     )
     item_id: Mapped[uuid.UUID] = mapped_column(
@@ -101,9 +91,7 @@ class ActivitySessionItem(Base):
 class LearningEvent(Base):
     __tablename__ = "learning_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("students.id", name="learning_events_student_id_fkey"),

@@ -36,7 +36,8 @@ class LLMService:
         prompt = f"""
         Eres un arquitecto educativo. Analiza el siguiente contenido y extrae:
         1. Un resumen conciso (máximo 200 palabras) EN ESPAÑOL.
-        2. Divide el contenido en fragmentos lógicos de conocimiento (máximo 500 palabras cada uno) EN ESPAÑOL.
+        2. Divide el contenido en fragmentos lógicos de conocimiento
+           (máximo 500 palabras cada uno) EN ESPAÑOL.
 
         Devuelve formato JSON:
         {{
@@ -54,7 +55,10 @@ class LLMService:
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un asistente educativo útil. Genera respuestas en ESPAÑOL. Output valid JSON.",
+                    "content": (
+                        "Eres un asistente educativo útil. "
+                        "Genera respuestas en ESPAÑOL. Output valid JSON."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -105,7 +109,10 @@ class LLMService:
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un experto creador de evaluaciones. Genera TODO el contenido en ESPAÑOL. Output valid JSON.",
+                    "content": (
+                        "Eres un experto creador de evaluaciones. "
+                        "Genera TODO el contenido en ESPAÑOL. Output valid JSON."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],

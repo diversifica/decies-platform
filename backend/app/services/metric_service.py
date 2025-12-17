@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.activity import LearningEvent
@@ -66,15 +65,11 @@ class MetricService:
         correct_events = sum(1 for e in events if e.is_correct)
         first_attempt_events = [e for e in events if e.attempt_number == 1]
         first_attempt_correct = sum(1 for e in first_attempt_events if e.is_correct)
-        hint_events = sum(
-            1 for e in events if e.hint_used and e.hint_used != "none"
-        )
+        hint_events = sum(1 for e in events if e.hint_used and e.hint_used != "none")
 
         accuracy = correct_events / total_events if total_events > 0 else 0.0
         first_attempt_accuracy = (
-            first_attempt_correct / len(first_attempt_events)
-            if first_attempt_events
-            else 0.0
+            first_attempt_correct / len(first_attempt_events) if first_attempt_events else 0.0
         )
         error_rate = 1.0 - accuracy
         hint_rate = hint_events / total_events if total_events > 0 else 0.0
@@ -82,9 +77,7 @@ class MetricService:
         # Calculate median response time
         response_times = sorted([e.duration_ms for e in events])
         median_idx = len(response_times) // 2
-        median_response_time_ms = (
-            response_times[median_idx] if response_times else 0
-        )
+        median_response_time_ms = response_times[median_idx] if response_times else 0
 
         # Calculate average attempts per item
         item_attempts = {}
@@ -95,9 +88,7 @@ class MetricService:
             item_attempts[item_id] += 1
 
         attempts_per_item_avg = (
-            sum(item_attempts.values()) / len(item_attempts)
-            if item_attempts
-            else 0.0
+            sum(item_attempts.values()) / len(item_attempts) if item_attempts else 0.0
         )
 
         return MetricAggregate(
@@ -175,9 +166,7 @@ class MetricService:
             # Calculate metrics for this microconcept
             total_events = len(events)
             correct_events = sum(1 for e in events if e.is_correct)
-            hint_events = sum(
-                1 for e in events if e.hint_used and e.hint_used != "none"
-            )
+            hint_events = sum(1 for e in events if e.hint_used and e.hint_used != "none")
 
             accuracy = correct_events / total_events if total_events > 0 else 0.0
             hint_rate = hint_events / total_events if total_events > 0 else 0.0
@@ -223,9 +212,7 @@ class MetricService:
         Returns the calculated metrics and mastery states.
         """
         # Calculate metrics
-        metrics = self.calculate_student_metrics(
-            db, student_id, subject_id, term_id
-        )
+        metrics = self.calculate_student_metrics(db, student_id, subject_id, term_id)
 
         # Save or update metrics
         existing_metrics = (
@@ -254,9 +241,7 @@ class MetricService:
             db.refresh(metrics)
 
         # Calculate mastery states
-        mastery_states = self.calculate_mastery_states(
-            db, student_id, subject_id, term_id
-        )
+        mastery_states = self.calculate_mastery_states(db, student_id, subject_id, term_id)
 
         # Save or update mastery states
         for ms in mastery_states:

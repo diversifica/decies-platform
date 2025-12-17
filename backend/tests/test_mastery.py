@@ -1,14 +1,10 @@
 import pytest
-from datetime import datetime, timedelta
 
 from app.core.db import SessionLocal
-from app.services.metric_service import MetricService
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
-from app.models.microconcept import MicroConcept
-from app.models.activity import ActivityType, LearningEvent
-import uuid
+from app.services.metric_service import MetricService
 
 
 @pytest.fixture
@@ -37,11 +33,11 @@ def test_mastery_score_calculation(db_session, metric_service):
     )
 
     assert isinstance(mastery_states, list)
-    
+
     for state in mastery_states:
         # Mastery score should be between 0 and 1
         assert 0.0 <= state.mastery_score <= 1.0
-        
+
         # Status should match score thresholds
         if state.mastery_score >= 0.8:
             assert state.status == "dominant"
@@ -58,9 +54,7 @@ def test_metrics_with_no_events(db_session, metric_service):
     term = db_session.query(Term).first()
 
     # Calculate metrics for student with no events
-    metrics = metric_service.calculate_student_metrics(
-        db_session, student.id, subject.id, term.id
-    )
+    metrics = metric_service.calculate_student_metrics(db_session, student.id, subject.id, term.id)
 
     # Should return zero metrics, not error
     assert metrics.accuracy == 0.0

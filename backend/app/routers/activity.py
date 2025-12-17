@@ -72,9 +72,7 @@ def create_session(session_data: ActivitySessionCreate, db: Session = Depends(ge
     )
 
     if not items:
-        raise HTTPException(
-            status_code=404, detail="No items found for this subject/term"
-        )
+        raise HTTPException(status_code=404, detail="No items found for this subject/term")
 
     # Create session items
     for idx, item in enumerate(items):

@@ -33,9 +33,7 @@ def list_microconcepts(
 
 
 @router.post("", response_model=MicroConceptResponse)
-def create_microconcept(
-    microconcept_data: MicroConceptCreate, db: Session = Depends(get_db)
-):
+def create_microconcept(microconcept_data: MicroConceptCreate, db: Session = Depends(get_db)):
     """
     Create a new microconcept (tutor/admin only in production).
     """

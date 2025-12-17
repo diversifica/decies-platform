@@ -2,25 +2,25 @@ import logging
 import sys
 import uuid
 from datetime import datetime
-from sqlalchemy.orm import Session
 
 # Add current directory to sys.path to resolve 'app' modules
 sys.path.append(".")
 
-from app.core.db import SessionLocal, engine
-from app.models.role import Role
-from app.models.user import User
-from app.models.tutor import Tutor
-from app.models.student import Student
-from app.models.term import AcademicYear, Term
-from app.models.subject import Subject
+from app.core.db import SessionLocal
 from app.models.activity import ActivityType
-from app.models.microconcept import MicroConcept
 from app.models.item import Item
+from app.models.microconcept import MicroConcept
+from app.models.role import Role
+from app.models.student import Student
+from app.models.subject import Subject
+from app.models.term import AcademicYear, Term
+from app.models.tutor import Tutor
+from app.models.user import User
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def seed_db():
     db = SessionLocal()
@@ -33,13 +33,13 @@ def seed_db():
             role_tutor = Role(id=uuid.uuid4(), name="tutor", description="Tutor Role")
             db.add(role_tutor)
             logger.info("Created Role: tutor")
-        
+
         role_student = db.query(Role).filter_by(name="student").first()
         if not role_student:
             role_student = Role(id=uuid.uuid4(), name="student", description="Student Role")
             db.add(role_student)
             logger.info("Created Role: student")
-        
+
         db.commit()
 
         # 2. Create Tutor User
@@ -49,24 +49,22 @@ def seed_db():
             user_tutor = User(
                 id=uuid.uuid4(),
                 email=tutor_email,
-                hashed_password="hashed_secret_password", # Dummy hash
+                hashed_password="hashed_secret_password",  # Dummy hash
                 full_name="Profesor Decies",
                 role_id=role_tutor.id,
-                is_active=True
+                is_active=True,
             )
             db.add(user_tutor)
-            db.flush() # Ensure user is pending insertion before tutor refers to it?
+            db.flush()  # Ensure user is pending insertion before tutor refers to it?
             logger.info(f"Created User: {tutor_email}")
-            
+
             # Create Tutor Profile
             tutor_profile = Tutor(
-                id=uuid.uuid4(),
-                user_id=user_tutor.id,
-                display_name="Profesor Decies (Ciencias)"
+                id=uuid.uuid4(), user_id=user_tutor.id, display_name="Profesor Decies (Ciencias)"
             )
             db.add(tutor_profile)
             logger.info("Created Tutor Profile")
-        
+
         db.commit()
 
         # 3. Create Student User
@@ -79,11 +77,11 @@ def seed_db():
                 hashed_password="hashed_secret_password",
                 full_name="Alumno Decies",
                 role_id=role_student.id,
-                is_active=True
+                is_active=True,
             )
             db.add(user_student)
             logger.info(f"Created User: {student_email}")
-            
+
             # Create Student Profile
             student_profile = Student(id=user_student.id, enrollment_date=datetime.now())
             db.add(student_profile)
@@ -95,11 +93,16 @@ def seed_db():
         year_name = "2025-2026"
         year = db.query(AcademicYear).filter_by(name=year_name).first()
         if not year:
-            year = AcademicYear(id=uuid.uuid4(), name=year_name, start_date=datetime(2025, 9, 1), end_date=datetime(2026, 6, 30))
+            year = AcademicYear(
+                id=uuid.uuid4(),
+                name=year_name,
+                start_date=datetime(2025, 9, 1),
+                end_date=datetime(2026, 6, 30),
+            )
             db.add(year)
             logger.info(f"Created AcademicYear: {year_name}")
-        
-        db.commit() # Commit to get year ID if needed, though UUID generated locally
+
+        db.commit()  # Commit to get year ID if needed, though UUID generated locally
 
         term_name = "Trimestre 1"
         term = db.query(Term).filter_by(name=term_name).first()
@@ -107,10 +110,8 @@ def seed_db():
             term = Term(
                 id=uuid.uuid4(),
                 name=term_name,
-                code="T1", # Added missing code
+                code="T1",  # Added missing code
                 academic_year_id=year.id,
-                start_date=datetime(2025, 9, 1),
-                end_date=datetime(2025, 12, 20)
             )
             db.add(term)
             logger.info(f"Created Term: {term_name}")
@@ -125,34 +126,29 @@ def seed_db():
                 id=uuid.uuid4(),
                 name=subject_name,
                 description="Cálculo y Álgebra Lineal",
-                tutor_id=user_tutor.id
+                tutor_id=user_tutor.id,
             )
             db.add(subject)
             logger.info(f"Created Subject: {subject.name}")
 
         db.commit()
-        
+
         # 6. Create Activity Types (Day 4)
         activity_types_data = [
             ("QUIZ", "Quiz Interactivo"),
             ("MATCH", "Emparejar Conceptos"),
             ("REVIEW", "Revisión Espaciada"),
         ]
-        
+
         for code, name in activity_types_data:
             existing = db.query(ActivityType).filter_by(code=code).first()
             if not existing:
-                activity_type = ActivityType(
-                    id=uuid.uuid4(),
-                    code=code,
-                    name=name,
-                    active=True
-                )
+                activity_type = ActivityType(id=uuid.uuid4(), code=code, name=name, active=True)
                 db.add(activity_type)
                 logger.info(f"Created ActivityType: {code}")
-        
+
         db.commit()
-        
+
         # 7. Create MicroConcepts (Day 4)
         microconcepts_data = [
             ("MC-001", "Límites de funciones", "Concepto de límite y continuidad"),
@@ -161,7 +157,7 @@ def seed_db():
             ("MC-004", "Matrices y determinantes", "Operaciones con matrices"),
             ("MC-005", "Sistemas de ecuaciones lineales", "Resolución de sistemas"),
         ]
-        
+
         for code, name, description in microconcepts_data:
             existing = db.query(MicroConcept).filter_by(code=code).first()
             if not existing:
@@ -172,27 +168,25 @@ def seed_db():
                     code=code,
                     name=name,
                     description=description,
-                    active=True
+                    active=True,
                 )
                 db.add(mc)
                 logger.info(f"Created MicroConcept: {code} - {name}")
-        
+
         db.commit()
-        
+
         # 8. Link existing Items to MicroConcepts (Day 4)
         # Get first microconcept to link items
         first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
         if first_mc:
-            items = db.query(Item).filter(
-                Item.microconcept_id.is_(None)
-            ).all()
-            
+            items = db.query(Item).filter(Item.microconcept_id.is_(None)).all()
+
             for item in items:
                 item.microconcept_id = first_mc.id
                 logger.info(f"Linked Item {item.id} to MicroConcept {first_mc.code}")
-            
+
             db.commit()
-        
+
         logger.info("Seeding complete!")
         logger.info(f"Tutor ID: {user_tutor.id}")
         logger.info(f"Student ID: {user_student.id}")
@@ -205,6 +199,7 @@ def seed_db():
         raise
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_db()

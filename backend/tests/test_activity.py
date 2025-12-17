@@ -1,16 +1,15 @@
-import uuid
 from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.core.db import SessionLocal
-from app.models.activity import ActivitySession, ActivityType, LearningEvent
+from app.main import app
+from app.models.activity import ActivityType
+from app.models.item import Item
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
-from app.models.item import Item
 
 client = TestClient(app)
 
@@ -47,8 +46,8 @@ def test_create_activity_session(db_session):
             "term_id": str(term.id),
             "topic_id": None,
             "item_count": 5,
-            "device_type": "web"
-        }
+            "device_type": "web",
+        },
     )
 
     assert response.status_code == 200
@@ -75,8 +74,8 @@ def test_record_learning_event(db_session):
             "term_id": str(term.id),
             "topic_id": None,
             "item_count": 5,
-            "device_type": "web"
-        }
+            "device_type": "web",
+        },
     )
     session_id = session_response.json()["id"]
 
@@ -101,8 +100,8 @@ def test_record_learning_event(db_session):
             "hint_used": None,
             "difficulty_at_time": None,
             "timestamp_start": start_time.isoformat(),
-            "timestamp_end": end_time.isoformat()
-        }
+            "timestamp_end": end_time.isoformat(),
+        },
     )
 
     assert response.status_code == 200
@@ -128,8 +127,8 @@ def test_end_session(db_session):
             "term_id": str(term.id),
             "topic_id": None,
             "item_count": 5,
-            "device_type": "web"
-        }
+            "device_type": "web",
+        },
     )
     session_id = session_response.json()["id"]
 

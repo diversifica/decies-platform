@@ -11,9 +11,7 @@ from app.core.db import Base
 class MicroConcept(Base):
     __tablename__ = "microconcepts"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subject_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subjects.id", name="microconcepts_subject_id_fkey"),
@@ -44,9 +42,7 @@ class MicroConcept(Base):
 class MicroConceptPrerequisite(Base):
     __tablename__ = "microconcept_prerequisites"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     microconcept_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("microconcepts.id", name="mc_prereq_microconcept_id_fkey"),
