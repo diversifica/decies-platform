@@ -7,6 +7,7 @@ from datetime import datetime
 sys.path.append(".")
 
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.models.activity import ActivityType
 from app.models.content import ContentUpload
 from app.models.item import Item, ItemType
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def seed_db():
+    default_password = "decies"
+
     db = SessionLocal()
     try:
         logger.info("Seeding database...")
@@ -50,7 +53,7 @@ def seed_db():
             user_tutor = User(
                 id=uuid.uuid4(),
                 email=tutor_email,
-                hashed_password="hashed_secret_password",  # Dummy hash
+                hashed_password=get_password_hash(default_password),
                 full_name="Profesor Decies",
                 role_id=role_tutor.id,
                 is_active=True,
@@ -58,8 +61,12 @@ def seed_db():
             db.add(user_tutor)
             db.flush()  # Ensure user is pending insertion before tutor refers to it?
             logger.info(f"Created User: {tutor_email}")
+        elif not user_tutor.hashed_password.startswith("$2"):
+            user_tutor.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Tutor password hash")
 
-            # Create Tutor Profile
+        tutor_profile = db.query(Tutor).filter_by(user_id=user_tutor.id).first()
+        if not tutor_profile:
             tutor_profile = Tutor(
                 id=uuid.uuid4(), user_id=user_tutor.id, display_name="Profesor Decies (Ciencias)"
             )
@@ -75,18 +82,16 @@ def seed_db():
             user_student = User(
                 id=uuid.uuid4(),
                 email=student_email,
-                hashed_password="hashed_secret_password",
+                hashed_password=get_password_hash(default_password),
                 full_name="Alumno Decies",
                 role_id=role_student.id,
                 is_active=True,
             )
             db.add(user_student)
             logger.info(f"Created User: {student_email}")
-
-            # Create Student Profile
-            student_profile = Student(id=user_student.id, enrollment_date=datetime.now())
-            db.add(student_profile)
-            logger.info("Created Student Profile")
+        elif not user_student.hashed_password.startswith("$2"):
+            user_student.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Student password hash")
 
         db.commit()
 
@@ -131,6 +136,31 @@ def seed_db():
             )
             db.add(subject)
             logger.info(f"Created Subject: {subject.name}")
+
+        db.commit()
+
+        # 5b. Ensure Student Profile is linked to tutor subject
+        student_profile = (
+            db.query(Student)
+            .filter((Student.user_id == user_student.id) | (Student.id == user_student.id))
+            .first()
+        )
+        if not student_profile:
+            student_profile = Student(
+                id=user_student.id,
+                user_id=user_student.id,
+                subject_id=subject.id,
+                enrollment_date=datetime.now(),
+            )
+            db.add(student_profile)
+            logger.info("Created Student Profile")
+        else:
+            if not student_profile.user_id:
+                student_profile.user_id = user_student.id
+            if not student_profile.subject_id:
+                student_profile.subject_id = subject.id
+            db.add(student_profile)
+            logger.info("Updated Student Profile links")
 
         db.commit()
 
@@ -251,8 +281,10 @@ def seed_db():
             db.commit()
 
         logger.info("Seeding complete!")
-        logger.info(f"Tutor ID: {user_tutor.id}")
-        logger.info(f"Student ID: {user_student.id}")
+        logger.info(f"Tutor User ID: {user_tutor.id}")
+        logger.info(f"Tutor Profile ID: {tutor_profile.id}")
+        logger.info(f"Student User ID: {user_student.id}")
+        logger.info(f"Student Profile ID: {student_profile.id}")
         logger.info(f"Subject ID: {subject.id}")
         logger.info(f"Term ID: {term.id}")
 
