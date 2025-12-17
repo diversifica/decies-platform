@@ -192,13 +192,18 @@ def seed_db():
 
         test_upload = db.query(ContentUpload).filter_by(file_name="test_upload.pdf").first()
         if not test_upload:
+            tutor_profile = db.query(Tutor).filter_by(user_id=user_tutor.id).first()
+            if not tutor_profile:
+                logger.error("Tutor profile not found for test upload creation")
+                return
+
             test_upload = ContentUpload(
                 id=uuid.uuid4(),
                 file_name="test_upload.pdf",
                 storage_uri="/test/test_upload.pdf",
                 mime_type="application/pdf",
                 upload_type="pdf",
-                tutor_id=user_tutor.id,
+                tutor_id=tutor_profile.id,
                 subject_id=subject.id,
                 term_id=term.id,
             )
