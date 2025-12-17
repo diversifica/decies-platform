@@ -1,5 +1,6 @@
-import pytest
 import uuid
+
+import pytest
 
 from app.core.db import SessionLocal
 from app.models.role import Role
@@ -52,7 +53,7 @@ def test_mastery_score_calculation(db_session, metric_service):
 
 def test_metrics_with_no_events(db_session, metric_service):
     """Test metrics calculation when student has no learning events"""
-    
+
     # Create a fresh student who definitely has no events
     # We need a User first
     role_student = db_session.query(Role).filter_by(name="Student").first()
@@ -60,7 +61,7 @@ def test_metrics_with_no_events(db_session, metric_service):
         role_student = Role(name="Student")
         db_session.add(role_student)
         db_session.commit()
-    
+
     unique_id = uuid.uuid4()
     new_user = User(
         id=unique_id,
@@ -68,14 +69,11 @@ def test_metrics_with_no_events(db_session, metric_service):
         hashed_password="hashed_secret",
         full_name="Fresh Student",
         role_id=role_student.id,
-        is_active=True
+        is_active=True,
     )
     db_session.add(new_user)
-    
-    new_student = Student(
-        id=new_user.id,
-        enrollment_date=None
-    )
+
+    new_student = Student(id=new_user.id, enrollment_date=None)
     db_session.add(new_student)
     db_session.commit()
 
@@ -83,7 +81,9 @@ def test_metrics_with_no_events(db_session, metric_service):
     term = db_session.query(Term).first()
 
     # Calculate metrics for student with no events
-    metrics = metric_service.calculate_student_metrics(db_session, new_student.id, subject.id, term.id)
+    metrics = metric_service.calculate_student_metrics(
+        db_session, new_student.id, subject.id, term.id
+    )
 
     # Should return zero metrics, not error
     assert metrics.accuracy == 0.0
