@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.routers import activity, content, metrics, microconcepts
+from app.routers import activity, content, metrics, microconcepts, recommendations
 
 app = FastAPI(
     title="DECIES API",
@@ -22,6 +22,7 @@ app.include_router(content.router, prefix="/api/v1")
 app.include_router(activity.router, prefix="/api/v1")
 app.include_router(metrics.router, prefix="/api/v1")
 app.include_router(microconcepts.router, prefix="/api/v1")
+app.include_router(recommendations.router, prefix="/api/v1")
 
 # CORS middleware
 app.add_middleware(
