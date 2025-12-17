@@ -89,9 +89,11 @@ def upload_content(
 
 
 @router.get("/uploads", response_model=list[ContentUploadResponse])
-def get_uploads(db: Session = Depends(get_db)):
-    # Filter by Tutor...
-    tutor = db.query(Tutor).first()
+def get_uploads(
+    tutor_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+):
+    tutor = db.get(Tutor, tutor_id) if tutor_id else db.query(Tutor).first()
     if not tutor:
         return []
 
