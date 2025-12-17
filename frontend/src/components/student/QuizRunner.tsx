@@ -14,45 +14,77 @@ interface Item {
 
 interface QuizRunnerProps {
     uploadId: string;
+    studentId: string;
+    subjectId: string;
+    termId: string;
     onExit: () => void;
 }
 
-export default function QuizRunner({ uploadId, onExit }: QuizRunnerProps) {
+export default function QuizRunner({ uploadId, studentId, subjectId, termId, onExit }: QuizRunnerProps) {
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(true);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [activityTypeId, setActivityTypeId] = useState<string | null>(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [score, setScore] = useState(0);
     const [finished, setFinished] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ isCorrect: boolean, text: string } | null>(null);
+    const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
 
     useEffect(() => {
-        const fetchItems = async () => {
+        const initSession = async () => {
             try {
-                const res = await api.get(`/content/uploads/${uploadId}/items`);
-                setItems(res.data);
-            } catch (err) {
-                console.error(err);
+                // 1. Get items
+                const itemsRes = await api.get(`/content/uploads/${uploadId}/items`);
+                setItems(itemsRes.data);
+
+                // 2. Get QUIZ activity type
+                const typesRes = await api.get('/activity-types');
+                const quizType = typesRes.data.find((t: any) => t.code === 'QUIZ');
+                if (!quizType) {
+                    console.error('QUIZ activity type not found');
+                    setLoading(false);
+                    return;
+                }
+                setActivityTypeId(quizType.id);
+
+                // 3. Create activity session
+                const sessionRes = await api.post('/activities/sessions', {
+                    student_id: studentId,
+                    activity_type_id: quizType.id,
+                    subject_id: subjectId,
+                    term_id: termId,
+                    topic_id: null,
+                    item_count: 10,
+                    device_type: 'web'
+                });
+                setSessionId(sessionRes.data.id);
+                setQuestionStartTime(new Date());
+
+            } catch (err: any) {
+                console.error('Error initializing session:', err);
             } finally {
                 setLoading(false);
             }
         };
-        fetchItems();
-    }, [uploadId]);
+        initSession();
+    }, [uploadId, studentId, subjectId, termId]);
 
     if (loading) return <p>Cargando preguntas...</p>;
     if (items.length === 0) return <p>No hay preguntas disponibles para este contenido.</p>;
+    if (!sessionId || !activityTypeId) return <p>Error al iniciar la sesión.</p>;
 
     const currentItem = items[currentIndex];
 
-    const handleAnswer = (option: string) => {
+    const handleAnswer = async (option: string) => {
         if (selectedOption) return; // Prevent double answer
         setSelectedOption(option);
 
+        const endTime = new Date();
+        const durationMs = endTime.getTime() - questionStartTime.getTime();
+
         // Check answer
-        // For True/False, typical options are "True", "False" or similar.
-        // For MCQ, typical list.
-        // Simple exact match check.
         const isCorrect = option === currentItem.correct_answer;
 
         if (isCorrect) {
@@ -64,16 +96,50 @@ export default function QuizRunner({ uploadId, onExit }: QuizRunnerProps) {
                 text: `Incorrecto. La respuesta correcta es: ${currentItem.correct_answer}. ${currentItem.explanation || ''}`
             });
         }
+
+        // Record learning event
+        try {
+            await api.post(`/activities/sessions/${sessionId}/responses`, {
+                student_id: studentId,
+                item_id: currentItem.id,
+                subject_id: subjectId,
+                term_id: termId,
+                topic_id: null,
+                microconcept_id: null, // Will be derived from item
+                activity_type_id: activityTypeId,
+                is_correct: isCorrect,
+                duration_ms: durationMs,
+                attempt_number: 1,
+                response_normalized: option,
+                hint_used: null,
+                difficulty_at_time: null,
+                timestamp_start: questionStartTime.toISOString(),
+                timestamp_end: endTime.toISOString()
+            });
+        } catch (err: any) {
+            console.error('Error recording event:', err);
+        }
     };
 
     const nextQuestion = () => {
         setSelectedOption(null);
         setFeedback(null);
+        setQuestionStartTime(new Date()); // Reset timer for next question
+
         if (currentIndex < items.length - 1) {
             setCurrentIndex(i => i + 1);
         } else {
-            setFinished(true);
+            finishSession();
         }
+    };
+
+    const finishSession = async () => {
+        try {
+            await api.post(`/activities/sessions/${sessionId}/end`);
+        } catch (err: any) {
+            console.error('Error ending session:', err);
+        }
+        setFinished(true);
     };
 
     if (finished) {
@@ -81,6 +147,9 @@ export default function QuizRunner({ uploadId, onExit }: QuizRunnerProps) {
             <div className="card" style={{ textAlign: 'center' }}>
                 <h3>Actividad Completada</h3>
                 <p style={{ fontSize: '2rem', margin: '2rem 0' }}>Score: {score} / {items.length}</p>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                    Tus métricas se han actualizado automáticamente.
+                </p>
                 <button onClick={onExit} className="btn">Volver al inicio</button>
             </div>
         );
@@ -117,7 +186,6 @@ export default function QuizRunner({ uploadId, onExit }: QuizRunnerProps) {
                         </button>
                     ))
                 ) : (
-                    /* Fallback for True/False if options missing? Usually LLM provides options for T/F too */
                     <p>Error: No options provided for question.</p>
                 )}
             </div>

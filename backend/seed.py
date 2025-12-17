@@ -14,6 +14,9 @@ from app.models.tutor import Tutor
 from app.models.student import Student
 from app.models.term import AcademicYear, Term
 from app.models.subject import Subject
+from app.models.activity import ActivityType
+from app.models.microconcept import MicroConcept
+from app.models.item import Item
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -129,7 +132,72 @@ def seed_db():
 
         db.commit()
         
+        # 6. Create Activity Types (Day 4)
+        activity_types_data = [
+            ("QUIZ", "Quiz Interactivo"),
+            ("MATCH", "Emparejar Conceptos"),
+            ("REVIEW", "Revisión Espaciada"),
+        ]
+        
+        for code, name in activity_types_data:
+            existing = db.query(ActivityType).filter_by(code=code).first()
+            if not existing:
+                activity_type = ActivityType(
+                    id=uuid.uuid4(),
+                    code=code,
+                    name=name,
+                    active=True
+                )
+                db.add(activity_type)
+                logger.info(f"Created ActivityType: {code}")
+        
+        db.commit()
+        
+        # 7. Create MicroConcepts (Day 4)
+        microconcepts_data = [
+            ("MC-001", "Límites de funciones", "Concepto de límite y continuidad"),
+            ("MC-002", "Derivadas básicas", "Reglas de derivación elementales"),
+            ("MC-003", "Integrales indefinidas", "Cálculo de primitivas"),
+            ("MC-004", "Matrices y determinantes", "Operaciones con matrices"),
+            ("MC-005", "Sistemas de ecuaciones lineales", "Resolución de sistemas"),
+        ]
+        
+        for code, name, description in microconcepts_data:
+            existing = db.query(MicroConcept).filter_by(code=code).first()
+            if not existing:
+                mc = MicroConcept(
+                    id=uuid.uuid4(),
+                    subject_id=subject.id,
+                    term_id=term.id,
+                    code=code,
+                    name=name,
+                    description=description,
+                    active=True
+                )
+                db.add(mc)
+                logger.info(f"Created MicroConcept: {code} - {name}")
+        
+        db.commit()
+        
+        # 8. Link existing Items to MicroConcepts (Day 4)
+        # Get first microconcept to link items
+        first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
+        if first_mc:
+            items = db.query(Item).filter(
+                Item.microconcept_id.is_(None)
+            ).all()
+            
+            for item in items:
+                item.microconcept_id = first_mc.id
+                logger.info(f"Linked Item {item.id} to MicroConcept {first_mc.code}")
+            
+            db.commit()
+        
         logger.info("Seeding complete!")
+        logger.info(f"Tutor ID: {user_tutor.id}")
+        logger.info(f"Student ID: {user_student.id}")
+        logger.info(f"Subject ID: {subject.id}")
+        logger.info(f"Term ID: {term.id}")
 
     except Exception as e:
         logger.error(f"Seeding failed: {e}")
