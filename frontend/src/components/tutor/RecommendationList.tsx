@@ -22,7 +22,7 @@ export default function RecommendationList({ studentId, subjectId, termId, tutor
         setLoading(true);
         try {
             // Generate is true by default in API, which is what we want on first load/refresh
-            const response = await api.get(`/students/${studentId}/recommendations`, {
+            const response = await api.get(`/recommendations/students/${studentId}`, {
                 params: {
                     subject_id: subjectId,
                     term_id: termId,

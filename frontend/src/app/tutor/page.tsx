@@ -5,12 +5,13 @@ import UploadForm from '../../components/tutor/UploadForm';
 import UploadList from '../../components/tutor/UploadList';
 import MetricsDashboard from '../../components/tutor/MetricsDashboard';
 import RecommendationList from '../../components/tutor/RecommendationList';
+import TutorReportPanel from '../../components/tutor/TutorReportPanel';
 
 export default function TutorPage() {
-    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations'>('content');
+    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports'>('content');
 
     // Hardcoded for MVP - synced with actual DB content from user session
-    const TUTOR_ID = "a2c1b4e5-9876-4321-abcd-1234567890ab"; // Default Tutor
+    const TUTOR_ID = "2f724489-4889-444b-b098-d7624c5561fd"; // Valid Tutor from DB
     const STUDENT_ID = "b3a2f673-4411-41bd-bf4b-f31211d90050";
     const SUBJECT_ID = "6f2302e2-11bc-4085-9447-31ff0e7c9cfd";
     const TERM_ID = "eac3d662-5414-466a-ad92-297690f0f7f3";
@@ -51,6 +52,12 @@ export default function TutorPage() {
                 >
                     Recomendaciones
                 </button>
+                <button
+                    onClick={() => setActiveTab('reports')}
+                    style={getTabStyle('reports')}
+                >
+                    Informe
+                </button>
             </div>
 
             {/* Content */}
@@ -79,6 +86,15 @@ export default function TutorPage() {
                     subjectId={SUBJECT_ID}
                     termId={TERM_ID}
                     tutorId={TUTOR_ID}
+                />
+            )}
+
+            {activeTab === 'reports' && (
+                <TutorReportPanel
+                    tutorId={TUTOR_ID}
+                    studentId={STUDENT_ID}
+                    subjectId={SUBJECT_ID}
+                    termId={TERM_ID}
                 />
             )}
         </div>

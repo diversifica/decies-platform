@@ -33,6 +33,7 @@ export default function RecommendationCard({ recommendation, tutorId, onDecision
         setLoading(true);
         try {
             await api.post(`/recommendations/${recommendation.id}/decision`, {
+                recommendation_id: recommendation.id,
                 decision,
                 tutor_id: tutorId,
                 notes: `Tutor decision: ${decision}`
