@@ -126,6 +126,7 @@ def get_student_mastery(
             db.query(LearningEvent)
             .filter(
                 LearningEvent.student_id == student_id,
+                LearningEvent.subject_id == subject_id,
                 LearningEvent.microconcept_id == ms.microconcept_id,
             )
             .count()

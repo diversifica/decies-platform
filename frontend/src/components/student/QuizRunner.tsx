@@ -40,7 +40,7 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
                 setItems(itemsRes.data);
 
                 // 2. Get QUIZ activity type
-                const typesRes = await api.get('/activity-types');
+                const typesRes = await api.get('/activities/activity-types');
                 const quizType = typesRes.data.find((t: any) => t.code === 'QUIZ');
                 if (!quizType) {
                     console.error('QUIZ activity type not found');

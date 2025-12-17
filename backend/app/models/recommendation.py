@@ -6,9 +6,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Relationship, Mapped, mapped_column, relationship
 
 from app.core.db import Base
-from app.models.content import ContentUpload
-from app.models.microconcept import MicroConcept
-from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
 from app.models.tutor import Tutor
