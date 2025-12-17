@@ -8,7 +8,8 @@ sys.path.append(".")
 
 from app.core.db import SessionLocal
 from app.models.activity import ActivityType
-from app.models.item import Item
+from app.models.content import ContentUpload
+from app.models.item import Item, ItemType
 from app.models.microconcept import MicroConcept
 from app.models.role import Role
 from app.models.student import Student
@@ -189,8 +190,6 @@ def seed_db():
 
         
         # 9. Create test ContentUpload and Items for CI tests (Day 4)
-        from app.models.content import ContentUpload
-        from app.models.item import Item, ItemType
         
         test_upload = db.query(ContentUpload).filter_by(file_name="test_upload.pdf").first()
         if not test_upload:
