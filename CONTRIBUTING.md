@@ -10,7 +10,23 @@
 - `fix/*`: Corrección de bugs
 - `docs/*`: Actualizaciones de documentación
 
-### 2. Crear Feature Branch
+### 2. Seguridad y Secretos
+
+**🔒 NUNCA subir secretos al repositorio.**
+
+- ❌ NO COMMIT: `.env`, API keys, passwords, tokens, certificados
+- ✅ USAR: `.env.example` con valores placeholder
+- ✅ VERIFICAR: Antes de commit, revisar que no haya secretos con:
+  ```bash
+  git diff --staged | grep -i "api_key\|password\|secret\|token"
+  ```
+
+Si accidentalmente subes un secreto:
+1. **Revocar el secreto inmediatamente**
+2. Generar uno nuevo
+3. Usar `git filter-branch` o contactar con el equipo
+
+### 3. Crear Feature Branch
 
 ```bash
 git checkout develop

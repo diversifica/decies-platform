@@ -1,0 +1,32 @@
+# CODEOWNERS file for decies-platform
+# Lines starting with '#' are comments.
+# Each line is a file pattern followed by one or more owners.
+
+# Global ownership
+* @diversifica
+
+# Backend ownership
+/backend/ @diversifica
+/backend/app/api/ @diversifica
+/backend/app/services/ @diversifica
+
+# Frontend ownership
+/frontend/ @diversifica
+
+# Documentation
+/docs/ @diversifica
+/docs/prompts/ @diversifica
+
+# Infrastructure & DevOps
+/.github/ @diversifica
+/docker-compose*.yml @diversifica
+/Makefile @diversifica
+/scripts/ @diversifica
+
+# Critical config files (require extra care)
+/.gitignore @diversifica
+/.env.example @diversifica
+/backend/.env.example @diversifica
+/frontend/.env.example @diversifica
+/backend/pyproject.toml @diversifica
+/frontend/package.json @diversifica
