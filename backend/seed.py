@@ -197,10 +197,10 @@ def seed_db():
                 file_name="test_upload.pdf",
                 storage_uri="/test/test_upload.pdf",
                 mime_type="application/pdf",
+                upload_type="pdf",
                 tutor_id=user_tutor.id,
                 subject_id=subject.id,
                 term_id=term.id,
-                status="processed",
             )
             db.add(test_upload)
             db.flush()
