@@ -127,9 +127,7 @@ class ReportService:
         first_attempt_label = (
             f"{first_attempt_accuracy * 100:.1f}%" if first_attempt_accuracy is not None else "N/A"
         )
-        median_time_label = (
-            f"{median_time_ms / 1000:.1f}s" if median_time_ms is not None else "N/A"
-        )
+        median_time_label = f"{median_time_ms / 1000:.1f}s" if median_time_ms is not None else "N/A"
 
         executive_lines = [
             "Resumen ejecutivo (últimos 30 días aprox.):",

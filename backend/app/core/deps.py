@@ -1,8 +1,6 @@
-from typing import Generator
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -12,18 +10,12 @@ from app.core.db import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"/api/v1/login/access-token"
-)
+reusable_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/login/access-token")
 
 
-def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
-) -> User:
+def get_current_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> User:
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[security.ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[security.ALGORITHM])
         token_data = TokenPayload(**payload)
     except (JWTError, ValidationError):
         raise HTTPException(

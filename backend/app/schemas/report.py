@@ -31,4 +31,3 @@ class TutorReportResponse(BaseModel):
     sections: list[TutorReportSectionResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
-

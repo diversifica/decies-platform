@@ -27,11 +27,9 @@ def login_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
-    
+
     access_token_expires = timedelta(seconds=settings.JWT_EXPIRES_SECONDS)
-    access_token = security.create_access_token(
-        user.id, expires_delta=access_token_expires
-    )
+    access_token = security.create_access_token(user.id, expires_delta=access_token_expires)
     return {
         "access_token": access_token,
         "token_type": "bearer",

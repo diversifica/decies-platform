@@ -131,4 +131,3 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert latest["id"] == payload["id"]
     assert any(s["section_type"] == "executive_summary" for s in latest["sections"])
     assert any(s["section_type"] == "recommendations" for s in latest["sections"])
-

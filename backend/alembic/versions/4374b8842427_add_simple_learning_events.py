@@ -8,12 +8,12 @@ Create Date: 2025-12-17 19:15:42.819398
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
-revision: str = '4374b8842427'
-down_revision: str | None = 'fee3346a2bfe'
+revision: str = "4374b8842427"
+down_revision: str | None = "fee3346a2bfe"
 branch_labels: str | None = None
 depends_on: str | None = None
 

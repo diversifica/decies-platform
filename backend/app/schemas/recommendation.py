@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel
+
 
 class RecommendationEvidenceBase(BaseModel):
     evidence_type: str
@@ -9,8 +11,10 @@ class RecommendationEvidenceBase(BaseModel):
     value: str
     description: Optional[str] = None
 
+
 class RecommendationEvidenceCreate(RecommendationEvidenceBase):
     pass
+
 
 class RecommendationEvidenceResponse(RecommendationEvidenceBase):
     id: uuid.UUID
@@ -21,12 +25,14 @@ class RecommendationEvidenceResponse(RecommendationEvidenceBase):
 
 
 class TutorDecisionBase(BaseModel):
-    decision: str # accepted, rejected
+    decision: str  # accepted, rejected
     notes: Optional[str] = None
+
 
 class TutorDecisionCreate(TutorDecisionBase):
     tutor_id: uuid.UUID
     recommendation_id: uuid.UUID
+
 
 class TutorDecisionResponse(TutorDecisionBase):
     id: uuid.UUID
@@ -47,8 +53,10 @@ class RecommendationInstanceBase(BaseModel):
     title: str
     description: str
 
+
 class RecommendationInstanceCreate(RecommendationInstanceBase):
     evidence_list: List[RecommendationEvidenceCreate]
+
 
 class RecommendationInstanceResponse(RecommendationInstanceBase):
     id: uuid.UUID

@@ -22,20 +22,10 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        # Default expiration time as fallback, though service should handle this
+        # Default expiration time as fallback, though service should handle this.
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    
-    # Use setting if available, otherwise fallback (should be in config)
-    # Using a hardcoded fallback ONLY if settings variable not present, but it should be.
-    # Assuming settings has JWT_SECRET.
-    # If settings doesn't have it, we need to update config.py. 
-    # Let's check config.py content again in next step if needed, but for now writes code assuming it exists or defined here.
-    
+
     to_encode = {"exp": expire, "sub": str(subject)}
-    
-    # We need a SECRET_KEY. In the plan I saw checking settings. 
-    # The config file viewed earlier did NOT have SECRET_KEY.
-    # I should add it to config.py as well.
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
 
