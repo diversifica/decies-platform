@@ -61,7 +61,7 @@ def seed_db():
             db.add(user_tutor)
             db.flush()  # Ensure user is pending insertion before tutor refers to it?
             logger.info(f"Created User: {tutor_email}")
-        elif not user_tutor.hashed_password.startswith("$2"):
+        elif not user_tutor.hashed_password.startswith("$pbkdf2-sha256$"):
             user_tutor.hashed_password = get_password_hash(default_password)
             logger.info("Updated Tutor password hash")
 
@@ -89,7 +89,7 @@ def seed_db():
             )
             db.add(user_student)
             logger.info(f"Created User: {student_email}")
-        elif not user_student.hashed_password.startswith("$2"):
+        elif not user_student.hashed_password.startswith("$pbkdf2-sha256$"):
             user_student.hashed_password = get_password_hash(default_password)
             logger.info("Updated Student password hash")
 
