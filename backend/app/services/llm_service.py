@@ -34,17 +34,17 @@ class LLMService:
             raise ValueError("LLM Client not configured (missing OPENAI_API_KEY)")
 
         prompt = f"""
-        You are an educational architect. Analyze the following content and extract:
-        1. A concise summary (max 200 words).
-        2. Divide the content into logical knowledge chunks (max 500 words each).
+        Eres un arquitecto educativo. Analiza el siguiente contenido y extrae:
+        1. Un resumen conciso (máximo 200 palabras) EN ESPAÑOL.
+        2. Divide el contenido en fragmentos lógicos de conocimiento (máximo 500 palabras cada uno) EN ESPAÑOL.
 
-        Return JSON format:
+        Devuelve formato JSON:
         {{
             "summary": "...",
-            "chunks": ["chunk 1 text...", "chunk 2 text..."]
+            "chunks": ["fragmento 1...", "fragmento 2..."]
         }}
 
-        Content:
+        Contenido:
         {text[:20000]} 
         """
         # Truncate to avoid context limit in prototype
@@ -54,7 +54,7 @@ class LLMService:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful educational assistant. Output valid JSON.",
+                    "content": "Eres un asistente educativo útil. Genera respuestas en ESPAÑOL. Output valid JSON.",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -73,30 +73,30 @@ class LLMService:
             raise ValueError("LLM Client not configured")
 
         prompt = f"""
-        Create {quantity} assessment items (Multiple Choice or True/False) 
-        based strictly on this text.
+        Crea {quantity} preguntas de evaluación (Opción Múltiple o Verdadero/Falso) 
+        basadas estrictamente en este texto. TODAS LAS PREGUNTAS DEBEN ESTAR EN ESPAÑOL.
         
-        Return JSON format:
+        Devuelve formato JSON:
         {{
             "items": [
                 {{
                     "type": "multiple_choice",
-                    "stem": "Question text...",
-                    "options": ["A", "B", "C", "D"],
-                    "correct_answer": "A",
-                    "explanation": "Why..."
+                    "stem": "Texto de la pregunta en español...",
+                    "options": ["Opción A", "Opción B", "Opción C", "Opción D"],
+                    "correct_answer": "Opción A",
+                    "explanation": "Explicación en español..."
                 }},
                 {{
                     "type": "true_false",
-                    "stem": "Statement...",
-                    "options": ["True", "False"],
-                    "correct_answer": "True",
-                    "explanation": "Why..."
+                    "stem": "Afirmación en español...",
+                    "options": ["Verdadero", "Falso"],
+                    "correct_answer": "Verdadero",
+                    "explanation": "Explicación en español..."
                 }}
             ]
         }}
 
-        Text:
+        Texto:
         {chunk_text[:5000]}
         """
 
@@ -105,7 +105,7 @@ class LLMService:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert assessment creator. Output valid JSON.",
+                    "content": "Eres un experto creador de evaluaciones. Genera TODO el contenido en ESPAÑOL. Output valid JSON.",
                 },
                 {"role": "user", "content": prompt},
             ],

@@ -30,6 +30,8 @@ services:
     container_name: decies-backend
     environment:
       DATABASE_URL: postgresql+psycopg2://decies:decies@db:5432/decies
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     volumes:
