@@ -12,7 +12,11 @@ interface Upload {
     // Add other fields as needed
 }
 
-export default function UploadList() {
+interface UploadListProps {
+    tutorId?: string;
+}
+
+export default function UploadList({ tutorId }: UploadListProps) {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -20,7 +24,7 @@ export default function UploadList() {
     const fetchUploads = async () => {
         try {
             setLoading(true);
-            const res = await api.get('/content/uploads');
+            const res = await api.get('/content/uploads', { params: { tutor_id: tutorId || undefined } });
             setUploads(res.data);
             setError('');
         } catch (err) {
@@ -33,7 +37,7 @@ export default function UploadList() {
 
     useEffect(() => {
         fetchUploads();
-    }, []);
+    }, [tutorId]);
 
     if (loading) return <p>Cargando uploads...</p>;
     if (error) return <p style={{ color: 'var(--error)' }}>{error}</p>;

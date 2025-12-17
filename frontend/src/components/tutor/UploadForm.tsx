@@ -1,18 +1,28 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../services/api';
 
-export default function UploadForm() {
+interface UploadFormProps {
+    tutorId?: string;
+    subjectId?: string;
+    termId?: string;
+}
+
+export default function UploadForm({ tutorId: tutorIdProp = '', subjectId: subjectIdProp = '', termId: termIdProp = '' }: UploadFormProps) {
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
     // Preliminary hardcoded IDs or inputs - For MVP Day 3 we assume user knows them or we default
     // Ideally these come from Auth context or Dropdowns
-    const [tutorId, setTutorId] = useState('');
-    const [subjectId, setSubjectId] = useState('');
-    const [termId, setTermId] = useState('');
+    const [tutorId, setTutorId] = useState(tutorIdProp);
+    const [subjectId, setSubjectId] = useState(subjectIdProp);
+    const [termId, setTermId] = useState(termIdProp);
+
+    useEffect(() => setTutorId(tutorIdProp), [tutorIdProp]);
+    useEffect(() => setSubjectId(subjectIdProp), [subjectIdProp]);
+    useEffect(() => setTermId(termIdProp), [termIdProp]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,10 +41,9 @@ export default function UploadForm() {
         formData.append('term_id', termId);
         // Defaults
         formData.append('upload_type', 'pdf');
-        formData.append('page_count', '1');
 
         try {
-            const res = await api.post('/content/uploads/', formData, {
+            const res = await api.post('/content/uploads', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             setMessage(`Subida exitosa: ID ${res.data.id}`);
@@ -71,6 +80,7 @@ export default function UploadForm() {
                         onChange={e => setTutorId(e.target.value)}
                         placeholder="UUID..."
                         className="input"
+                        disabled={!!tutorIdProp}
                     />
                 </label>
 
@@ -82,6 +92,7 @@ export default function UploadForm() {
                         onChange={e => setSubjectId(e.target.value)}
                         placeholder="UUID..."
                         className="input"
+                        disabled={!!subjectIdProp}
                     />
                 </label>
 
@@ -93,6 +104,7 @@ export default function UploadForm() {
                         onChange={e => setTermId(e.target.value)}
                         placeholder="UUID..."
                         className="input"
+                        disabled={!!termIdProp}
                     />
                 </label>
 
