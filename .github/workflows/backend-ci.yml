@@ -66,6 +66,12 @@ jobs:
           . .venv/bin/activate
           DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" uv run alembic upgrade head
 
+      - name: Seed database
+        working-directory: backend
+        run: |
+          . .venv/bin/activate
+          DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" uv run python seed.py
+
       - name: Run tests
         working-directory: backend
         run: |
