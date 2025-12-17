@@ -23,6 +23,11 @@ class Item(Base):
         ForeignKey("content_uploads.id", name="items_content_upload_id_fkey", ondelete="CASCADE"),
         nullable=False,
     )
+    microconcept_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("microconcepts.id", name="items_microconcept_id_fkey"),
+        nullable=True,
+    )
     type: Mapped[ItemType] = mapped_column(
         Enum(ItemType, name="item_type", create_type=False), nullable=False
     )
