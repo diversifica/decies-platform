@@ -59,12 +59,15 @@ def create_session(session_data: ActivitySessionCreate, db: Session = Depends(ge
     db.flush()
 
     # Select random items for this session
+    # Items are linked to content_uploads, which are linked to subjects
+    from app.models.content import ContentUpload
+
     items = (
         db.query(Item)
+        .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
         .filter(
-            Item.subject_id == session_data.subject_id,
-            Item.term_id == session_data.term_id,
-            Item.status == "active",
+            ContentUpload.subject_id == session_data.subject_id,
+            ContentUpload.term_id == session_data.term_id,
         )
         .order_by(Item.id)  # Simple ordering, could be randomized
         .limit(session_data.item_count)
