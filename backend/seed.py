@@ -188,9 +188,8 @@ def seed_db():
 
             db.commit()
 
-        
         # 9. Create test ContentUpload and Items for CI tests (Day 4)
-        
+
         test_upload = db.query(ContentUpload).filter_by(file_name="test_upload.pdf").first()
         if not test_upload:
             test_upload = ContentUpload(
@@ -206,7 +205,7 @@ def seed_db():
             db.add(test_upload)
             db.flush()
             logger.info("Created test ContentUpload")
-            
+
             # Create test items
             first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
             for i in range(10):
@@ -215,17 +214,17 @@ def seed_db():
                     content_upload_id=test_upload.id,
                     microconcept_id=first_mc.id if first_mc else None,
                     type=ItemType.MCQ,
-                    stem=f"Pregunta de prueba {i+1}",
+                    stem=f"Pregunta de prueba {i + 1}",
                     options={"choices": ["Opción A", "Opción B", "Opción C", "Opción D"]},
                     correct_answer="Opción A",
-                    explanation=f"Explicación de la pregunta {i+1}",
+                    explanation=f"Explicación de la pregunta {i + 1}",
                     difficulty=1,
                 )
                 db.add(item)
-                logger.info(f"Created test Item {i+1}")
-            
+                logger.info(f"Created test Item {i + 1}")
+
             db.commit()
-        
+
         logger.info("Seeding complete!")
         logger.info(f"Tutor ID: {user_tutor.id}")
         logger.info(f"Student ID: {user_student.id}")
