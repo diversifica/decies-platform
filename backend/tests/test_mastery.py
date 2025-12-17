@@ -1,9 +1,12 @@
 import pytest
+import uuid
 
 from app.core.db import SessionLocal
+from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
+from app.models.user import User
 from app.services.metric_service import MetricService
 
 
@@ -49,9 +52,6 @@ def test_mastery_score_calculation(db_session, metric_service):
 
 def test_metrics_with_no_events(db_session, metric_service):
     """Test metrics calculation when student has no learning events"""
-    import uuid
-    from app.models.user import User
-    from app.models.role import Role
     
     # Create a fresh student who definitely has no events
     # We need a User first
