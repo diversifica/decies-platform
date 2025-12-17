@@ -7,13 +7,18 @@ import QuizRunner from '../../components/student/QuizRunner';
 interface Upload {
     id: string;
     file_name: string;
+    subject_id: string;
+    term_id: string;
     created_at: string;
 }
 
 export default function StudentPage() {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
+    const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
+
+    // Hardcoded for MVP - from seed.py output
+    const STUDENT_ID = "b3a2f673-4411-41bd-bf4b-f31211d90050";
 
     useEffect(() => {
         const init = async () => {
@@ -29,11 +34,14 @@ export default function StudentPage() {
         init();
     }, []);
 
-    if (selectedUploadId) {
+    if (selectedUpload) {
         return (
             <QuizRunner
-                uploadId={selectedUploadId}
-                onExit={() => setSelectedUploadId(null)}
+                uploadId={selectedUpload.id}
+                studentId={STUDENT_ID}
+                subjectId={selectedUpload.subject_id}
+                termId={selectedUpload.term_id}
+                onExit={() => setSelectedUpload(null)}
             />
         );
     }
@@ -51,7 +59,7 @@ export default function StudentPage() {
                                 {new Date(upload.created_at).toLocaleDateString()}
                             </p>
                             <button
-                                onClick={() => setSelectedUploadId(upload.id)}
+                                onClick={() => setSelectedUpload(upload)}
                                 className="btn"
                             >
                                 Comenzar Actividad

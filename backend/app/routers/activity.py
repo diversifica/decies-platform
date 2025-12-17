@@ -15,12 +15,22 @@ from app.models.item import Item
 from app.schemas.activity import (
     ActivitySessionCreate,
     ActivitySessionResponse,
+    ActivityTypeResponse,
     LearningEventCreate,
     LearningEventResponse,
 )
 from app.services.metric_service import metric_service
 
 router = APIRouter(prefix="/activities", tags=["activities"])
+
+
+@router.get("/activity-types", response_model=list[ActivityTypeResponse])
+def list_activity_types(db: Session = Depends(get_db)):
+    """
+    List all activity types.
+    """
+    types = db.query(ActivityType).filter_by(active=True).all()
+    return types
 
 
 @router.post("/sessions", response_model=ActivitySessionResponse)
