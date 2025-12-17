@@ -59,8 +59,8 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
         fetchData();
     }, [studentId, subjectId, termId]);
 
-    if (loading) return <p>Cargando mÇ¸tricas...</p>;
-    if (!metrics) return <p>No hay datos de mÇ¸tricas disponibles.</p>;
+    if (loading) return <p>Cargando métricas...</p>;
+    if (!metrics) return <p>No hay datos de métricas disponibles.</p>;
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -112,11 +112,11 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
 
     return (
         <div>
-            <h2 style={{ marginBottom: '2rem' }}>Dashboard de MÇ¸tricas</h2>
+            <h2 style={{ marginBottom: '2rem' }}>Dashboard de Métricas</h2>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 <div className="card" style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>PrecisiÇün Global</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Precisión Global</p>
                     <p style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary)' }}>
                         {formatPercentage(metrics.accuracy)}
                     </p>
@@ -164,7 +164,7 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                 {masteryStates.length === 0 ? (
                     <div style={{ display: 'grid', gap: '1rem' }}>
                         <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-                            No hay datos de dominio disponibles aÇ§n.
+                            No hay datos de dominio disponibles aún.
                         </p>
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                             <button
@@ -216,7 +216,7 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                                     </div>
                                     {ms.last_practice_at && (
                                         <div>
-                                            <strong>Çsltima PrÇ­ctica:</strong> {new Date(ms.last_practice_at).toLocaleDateString()}
+                                            <strong>Última Práctica:</strong> {new Date(ms.last_practice_at).toLocaleDateString()}
                                         </div>
                                     )}
                                 </div>
@@ -238,9 +238,8 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
             </div>
 
             <p style={{ marginTop: '2rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                Datos de los Ç§ltimos 30 dÇðas ƒ?½ Actualizado automÇ­ticamente tras cada sesiÇün
+                Datos de los últimos 30 días — Actualizado automáticamente tras cada sesión
             </p>
         </div>
     );
 }
-
