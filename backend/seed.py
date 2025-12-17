@@ -177,16 +177,36 @@ def seed_db():
         db.commit()
 
         # 8. Link existing Items to MicroConcepts (Day 4)
-        # Get first microconcept to link items
-        first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
-        if first_mc:
-            items = db.query(Item).filter(Item.microconcept_id.is_(None)).all()
+        # Important: only link items to microconcepts that match the upload scope (subject/term).
+        # Avoid cross-subject links that break mastery calculations.
+        unlinked = (
+            db.query(Item, ContentUpload)
+            .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
+            .filter(Item.microconcept_id.is_(None))
+            .all()
+        )
+        if unlinked:
+            updated = 0
+            for item, upload in unlinked:
+                mc = (
+                    db.query(MicroConcept)
+                    .filter(
+                        MicroConcept.subject_id == upload.subject_id,
+                        MicroConcept.term_id == upload.term_id,
+                        MicroConcept.active == True,  # noqa: E712
+                    )
+                    .order_by(MicroConcept.created_at.asc())
+                    .first()
+                )
+                if not mc:
+                    continue
 
-            for item in items:
-                item.microconcept_id = first_mc.id
-                logger.info(f"Linked Item {item.id} to MicroConcept {first_mc.code}")
+                item.microconcept_id = mc.id
+                updated += 1
+                logger.info(f"Linked Item {item.id} to MicroConcept {mc.code or mc.name}")
 
-            db.commit()
+            if updated:
+                db.commit()
 
         # 9. Create test ContentUpload and Items for CI tests (Day 4)
 

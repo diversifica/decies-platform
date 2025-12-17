@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.models.activity import LearningEvent
+from app.models.content import ContentUpload
+from app.models.item import Item
 from app.models.microconcept import MicroConcept
 from app.schemas.microconcept import MicroConceptCreate, MicroConceptResponse
 
@@ -65,3 +68,73 @@ def get_microconcept(microconcept_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Microconcept not found")
 
     return microconcept
+
+
+@router.post("/bootstrap")
+def bootstrap_microconcepts_for_scope(
+    subject_id: uuid.UUID,
+    term_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Dev-only helper: ensures the subject/term has at least one microconcept ("General"),
+    and aligns items + learning_events in that scope to reference it.
+
+    This unblocks mastery calculations when the dataset has practice sessions but no
+    microconcept taxonomy yet.
+    """
+    microconcept = (
+        db.query(MicroConcept)
+        .filter(
+            MicroConcept.subject_id == subject_id,
+            MicroConcept.term_id == term_id,
+            MicroConcept.active == True,  # noqa: E712
+        )
+        .order_by(MicroConcept.created_at.asc())
+        .first()
+    )
+
+    created = False
+    if not microconcept:
+        microconcept = MicroConcept(
+            id=uuid.uuid4(),
+            subject_id=subject_id,
+            term_id=term_id,
+            topic_id=None,
+            code=None,
+            name="General",
+            description="Microconcepto genérico (bootstrap dev)",
+            active=True,
+        )
+        db.add(microconcept)
+        db.commit()
+        db.refresh(microconcept)
+        created = True
+
+    items = (
+        db.query(Item)
+        .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
+        .filter(ContentUpload.subject_id == subject_id, ContentUpload.term_id == term_id)
+        .all()
+    )
+    updated_items = 0
+    for item in items:
+        if item.microconcept_id != microconcept.id:
+            item.microconcept_id = microconcept.id
+            updated_items += 1
+
+    updated_events = (
+        db.query(LearningEvent)
+        .filter(LearningEvent.subject_id == subject_id, LearningEvent.term_id == term_id)
+        .update({LearningEvent.microconcept_id: microconcept.id})
+    )
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "microconcept_id": str(microconcept.id),
+        "created": created,
+        "updated_items": updated_items,
+        "updated_events": int(updated_events or 0),
+    }
