@@ -9,8 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.v1 import auth, events
 from app.core.db import get_db
-from app.routers import activity, content, metrics, microconcepts, recommendations
+from app.routers import activity, content, metrics, microconcepts, recommendations, reports
 
 app = FastAPI(
     title="DECIES API",
@@ -18,11 +19,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(events.router, prefix="/api/v1")
 app.include_router(content.router, prefix="/api/v1")
 app.include_router(activity.router, prefix="/api/v1")
 app.include_router(metrics.router, prefix="/api/v1")
 app.include_router(microconcepts.router, prefix="/api/v1")
 app.include_router(recommendations.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 # CORS middleware
 app.add_middleware(

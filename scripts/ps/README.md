@@ -30,6 +30,13 @@ Desde la raíz del repositorio:
   powershell -ExecutionPolicy Bypass -File .\scripts\ps\test-backend.ps1
   ```
 
+* Migraciones (alembic) en contenedor:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\ps\db-migrate.ps1
+  ```
+
 ## Notas
 
 * Los comandos de lint y test se ejecutan dentro del contenedor `backend` para evitar dependencias locales (por ejemplo, diferencias de Python/Conda en Windows).
+* Si actualizas el repo y aparecen errores de base de datos (tablas faltantes), ejecuta `db-migrate.ps1`.

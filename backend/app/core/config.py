@@ -6,6 +6,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     LLM_MODEL_NAME: str = "gpt-4-turbo-preview"
 
+    # Auth
+    JWT_SECRET: str = "changethis"  # Should be changed in .env
+    JWT_EXPIRES_SECONDS: int = 3600  # 1 hour
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

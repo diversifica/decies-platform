@@ -33,6 +33,7 @@ from app.models import (  # noqa: E402, F401, I001
     llm_run,
     metric,
     microconcept,
+    report,
     role,
     student,
     subject,

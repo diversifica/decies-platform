@@ -36,22 +36,20 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
     const [metrics, setMetrics] = useState<StudentMetrics | null>(null);
     const [masteryStates, setMasteryStates] = useState<MasteryState[]>([]);
     const [loading, setLoading] = useState(true);
+    const [bootstrapLoading, setBootstrapLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch student metrics
                 const metricsRes = await api.get(`/metrics/students/${studentId}/metrics`, {
                     params: { subject_id: subjectId, term_id: termId }
                 });
                 setMetrics(metricsRes.data);
 
-                // Fetch mastery states
                 const masteryRes = await api.get(`/metrics/students/${studentId}/mastery`, {
                     params: { subject_id: subjectId, term_id: termId }
                 });
                 setMasteryStates(masteryRes.data);
-
             } catch (err: any) {
                 console.error('Error fetching metrics:', err);
             } finally {
@@ -93,11 +91,29 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
         return `${(ms / 1000).toFixed(1)}s`;
     };
 
+    const bootstrapDomain = async () => {
+        setBootstrapLoading(true);
+        try {
+            await api.post('/microconcepts/bootstrap', null, {
+                params: { subject_id: subjectId, term_id: termId }
+            });
+
+            const masteryRes = await api.get(`/metrics/students/${studentId}/mastery`, {
+                params: { subject_id: subjectId, term_id: termId }
+            });
+            setMasteryStates(masteryRes.data);
+        } catch (err: any) {
+            console.error('Error bootstrapping domain:', err);
+            alert(err?.response?.data?.detail || err?.message || 'Error inicializando dominio');
+        } finally {
+            setBootstrapLoading(false);
+        }
+    };
+
     return (
         <div>
             <h2 style={{ marginBottom: '2rem' }}>Dashboard de Métricas</h2>
 
-            {/* Metrics Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 <div className="card" style={{ textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Precisión Global</p>
@@ -142,12 +158,27 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                 </div>
             </div>
 
-            {/* Mastery States */}
             <div className="card">
                 <h3 style={{ marginBottom: '1.5rem' }}>Estado de Dominio por Microconcepto</h3>
 
                 {masteryStates.length === 0 ? (
-                    <p style={{ color: 'var(--text-secondary)' }}>No hay datos de dominio disponibles aún.</p>
+                    <div style={{ display: 'grid', gap: '1rem' }}>
+                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                            No hay datos de dominio disponibles aún.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <button
+                                onClick={bootstrapDomain}
+                                className="btn"
+                                disabled={bootstrapLoading}
+                            >
+                                {bootstrapLoading ? 'Inicializando...' : 'Inicializar dominio (dev)'}
+                            </button>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                Crea un microconcepto "General" para este subject/term y alinea items/eventos.
+                            </span>
+                        </div>
+                    </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {masteryStates.map((ms) => (
@@ -190,7 +221,6 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                                     )}
                                 </div>
 
-                                {/* Progress bar */}
                                 <div style={{ marginTop: '0.75rem', height: '8px', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                                     <div
                                         style={{
@@ -208,7 +238,7 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
             </div>
 
             <p style={{ marginTop: '2rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                Datos de los últimos 30 días • Actualizado automáticamente tras cada sesión
+                Datos de los últimos 30 días — Actualizado automáticamente tras cada sesión
             </p>
         </div>
     );
