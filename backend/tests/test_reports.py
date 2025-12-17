@@ -131,3 +131,25 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert latest["id"] == payload["id"]
     assert any(s["section_type"] == "executive_summary" for s in latest["sections"])
     assert any(s["section_type"] == "recommendations" for s in latest["sections"])
+
+    list_res = client.get(
+        "/api/v1/reports",
+        params={
+            "tutor_id": str(tutor.id),
+            "student_id": str(student.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "limit": 10,
+        },
+    )
+    assert list_res.status_code == 200
+    reports = list_res.json()
+    assert any(r["id"] == payload["id"] for r in reports)
+
+    get_res = client.get(
+        f"/api/v1/reports/{payload['id']}",
+        params={"tutor_id": str(tutor.id)},
+    )
+    assert get_res.status_code == 200
+    report = get_res.json()
+    assert report["id"] == payload["id"]
