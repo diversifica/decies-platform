@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1 import auth, events
 from app.core.db import get_db
-from app.routers import activity, content, metrics, microconcepts, recommendations, reports
+from app.routers import activity, catalog, content, metrics, microconcepts, recommendations, reports
 
 app = FastAPI(
     title="DECIES API",
@@ -27,6 +27,7 @@ app.include_router(metrics.router, prefix="/api/v1")
 app.include_router(microconcepts.router, prefix="/api/v1")
 app.include_router(recommendations.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(catalog.router, prefix="/api/v1")
 
 # CORS middleware
 app.add_middleware(

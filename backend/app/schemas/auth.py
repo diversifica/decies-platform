@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr
@@ -15,3 +16,12 @@ class TokenPayload(BaseModel):
 class Login(BaseModel):
     email: EmailStr
     password: str
+
+
+class UserMe(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    full_name: str | None = None
+    role: str | None = None
+    tutor_id: uuid.UUID | None = None
+    student_id: uuid.UUID | None = None

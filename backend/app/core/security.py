@@ -10,7 +10,9 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# NOTE: bcrypt backend has compatibility issues in some CI environments (see passlib/bcrypt).
+# PBKDF2-SHA256 is deterministic and avoids platform-specific bcrypt backend problems.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 ALGORITHM = "HS256"
 
@@ -34,7 +36,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a password against a hash.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
