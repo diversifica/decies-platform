@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
 from app.core.security import get_password_hash
 from app.main import app
+from app.models.activity import ActivitySession, ActivityType
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.models.role import Role
@@ -109,6 +110,29 @@ def test_generate_and_get_latest_report(db_session: Session):
     db_session.add_all([metrics, mastery])
     db_session.commit()
 
+    quiz_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    if not quiz_type:
+        quiz_type = ActivityType(code="QUIZ", name="Quiz", active=True)
+        db_session.add(quiz_type)
+        db_session.commit()
+
+    feedback_session = ActivitySession(
+        student_id=student.id,
+        activity_type_id=quiz_type.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        topic_id=None,
+        started_at=datetime.utcnow(),
+        ended_at=datetime.utcnow(),
+        status="completed",
+        device_type="web",
+        feedback_rating=5,
+        feedback_text="Me ha servido para repasar.",
+        feedback_submitted_at=datetime.utcnow(),
+    )
+    db_session.add(feedback_session)
+    db_session.commit()
+
     token_res = client.post(
         "/api/v1/login/access-token",
         json={"email": tutor_user.email, "password": password},
@@ -143,6 +167,7 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert latest["id"] == payload["id"]
     assert any(s["section_type"] == "executive_summary" for s in latest["sections"])
     assert any(s["section_type"] == "recommendations" for s in latest["sections"])
+    assert any(s["section_type"] == "student_feedback" for s in latest["sections"])
 
     list_res = client.get(
         "/api/v1/reports",

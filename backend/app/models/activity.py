@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -61,6 +62,9 @@ class ActivitySession(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="in_progress", nullable=False
     )  # in_progress, completed, abandoned
+    feedback_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     device_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP"), nullable=True

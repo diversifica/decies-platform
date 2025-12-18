@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.core.db import SessionLocal
 from app.main import app
-from app.models.activity import ActivitySessionItem, ActivityType
+from app.models.activity import ActivitySession, ActivitySessionItem, ActivityType
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item, ItemType
 from app.models.metric import MasteryState
@@ -335,3 +335,59 @@ def test_create_activity_session_adaptive_selection_prioritizes_at_risk(db_sessi
         counts[mcid] = counts.get(mcid, 0) + 1
 
     assert max(counts.values()) <= 2
+
+
+def test_submit_activity_session_feedback(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 3,
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = uuid.UUID(session_res.json()["id"])
+
+    end_res = client.post(f"/api/v1/activities/sessions/{session_id}/end", headers=headers)
+    assert end_res.status_code == 200
+
+    feedback_res = client.post(
+        f"/api/v1/activities/sessions/{session_id}/feedback",
+        json={"rating": 4, "text": "Me gustó la actividad."},
+        headers=headers,
+    )
+    assert feedback_res.status_code == 200
+
+    session = db_session.get(ActivitySession, session_id)
+    assert session is not None
+    assert session.feedback_rating == 4
+    assert session.feedback_text == "Me gustó la actividad."
+    assert session.feedback_submitted_at is not None
