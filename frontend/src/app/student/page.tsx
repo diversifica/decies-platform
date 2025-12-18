@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import AuthPanel from '../../components/auth/AuthPanel';
 import api from '../../services/api';
 import QuizRunner from '../../components/student/QuizRunner';
+import MatchRunner from '../../components/student/MatchRunner';
 import { AuthMe } from '../../services/auth';
 
 interface Upload {
@@ -18,6 +19,7 @@ export default function StudentPage() {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
+    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH'>('QUIZ');
     const [me, setMe] = useState<AuthMe | null>(null);
 
     useEffect(() => {
@@ -40,7 +42,15 @@ export default function StudentPage() {
         if (!studentId) {
             return <p>No hay estudiante asociado a esta sesión. Inicia sesión como estudiante.</p>;
         }
-        return (
+        return selectedMode === 'MATCH' ? (
+            <MatchRunner
+                uploadId={selectedUpload.id}
+                studentId={studentId}
+                subjectId={selectedUpload.subject_id}
+                termId={selectedUpload.term_id}
+                onExit={() => setSelectedUpload(null)}
+            />
+        ) : (
             <QuizRunner
                 uploadId={selectedUpload.id}
                 studentId={studentId}
@@ -71,13 +81,22 @@ export default function StudentPage() {
                             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                                 {new Date(upload.created_at).toLocaleDateString()}
                             </p>
-                            <button
-                                disabled={!studentId}
-                                onClick={() => setSelectedUpload(upload)}
-                                className="btn"
-                            >
-                                Comenzar Actividad
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button
+                                    disabled={!studentId}
+                                    onClick={() => { setSelectedMode('QUIZ'); setSelectedUpload(upload); }}
+                                    className="btn"
+                                >
+                                    Quiz
+                                </button>
+                                <button
+                                    disabled={!studentId}
+                                    onClick={() => { setSelectedMode('MATCH'); setSelectedUpload(upload); }}
+                                    className="btn btn-secondary"
+                                >
+                                    Match
+                                </button>
+                            </div>
                         </div>
                     ))}
                     {uploads.length === 0 && <p>No hay actividades asignadas.</p>}

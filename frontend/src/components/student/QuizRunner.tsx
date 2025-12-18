@@ -7,7 +7,7 @@ interface Item {
     id: string;
     type: string;
     stem: string;
-    options?: string[];
+    options?: any;
     correct_answer: string;
     explanation?: string;
 }
@@ -35,11 +35,7 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
     useEffect(() => {
         const initSession = async () => {
             try {
-                // 1. Get items
-                const itemsRes = await api.get(`/content/uploads/${uploadId}/items`);
-                setItems(itemsRes.data);
-
-                // 2. Get QUIZ activity type
+                // 1. Get QUIZ activity type
                 const typesRes = await api.get('/activities/activity-types');
                 const quizType = typesRes.data.find((t: any) => t.code === 'QUIZ');
                 if (!quizType) {
@@ -49,7 +45,7 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
                 }
                 setActivityTypeId(quizType.id);
 
-                // 3. Create activity session
+                // 2. Create activity session
                 const sessionRes = await api.post('/activities/sessions', {
                     student_id: studentId,
                     activity_type_id: quizType.id,
@@ -57,9 +53,14 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
                     term_id: termId,
                     topic_id: null,
                     item_count: 10,
+                    content_upload_id: uploadId,
                     device_type: 'web'
                 });
                 setSessionId(sessionRes.data.id);
+
+                // 3. Get session items (ordered)
+                const sessionItemsRes = await api.get(`/activities/sessions/${sessionRes.data.id}/items`);
+                setItems(sessionItemsRes.data);
                 setQuestionStartTime(new Date());
 
             } catch (err: any) {
@@ -76,6 +77,9 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
     if (!sessionId || !activityTypeId) return <p>Error al iniciar la sesión.</p>;
 
     const currentItem = items[currentIndex];
+    const options: string[] = Array.isArray(currentItem.options)
+        ? currentItem.options
+        : (Array.isArray(currentItem.options?.choices) ? currentItem.options.choices : []);
 
     const handleAnswer = async (option: string) => {
         if (selectedOption) return; // Prevent double answer
@@ -165,8 +169,8 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
             <h3 style={{ marginBottom: '1.5rem' }}>{currentItem.stem}</h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {currentItem.options ? (
-                    currentItem.options.map((opt, idx) => (
+                {options.length > 0 ? (
+                    options.map((opt, idx) => (
                         <button
                             key={idx}
                             onClick={() => handleAnswer(opt)}

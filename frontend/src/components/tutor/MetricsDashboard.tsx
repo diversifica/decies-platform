@@ -175,7 +175,7 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                                 {bootstrapLoading ? 'Inicializando...' : 'Inicializar dominio (dev)'}
                             </button>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                                Crea un microconcepto "General" para este subject/term y alinea items/eventos.
+                                Crea un microconcepto &quot;General&quot; para este subject/term y alinea items/eventos.
                             </span>
                         </div>
                     </div>

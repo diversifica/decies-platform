@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime
 
@@ -12,7 +13,7 @@ from app.models.activity import (
     ActivityType,
     LearningEvent,
 )
-from app.models.item import Item
+from app.models.item import Item, ItemType
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.tutor import Tutor
@@ -24,6 +25,7 @@ from app.schemas.activity import (
     LearningEventCreate,
     LearningEventResponse,
 )
+from app.schemas.item import ItemResponse
 from app.services.metric_service import metric_service
 
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -76,6 +78,13 @@ def create_session(
     if not activity_type:
         raise HTTPException(status_code=404, detail="Activity type not found")
 
+    allowed_item_types: list[ItemType]
+    if activity_type.code == "MATCH":
+        allowed_item_types = [ItemType.MATCH]
+    else:
+        # Default: QUIZ-like items
+        allowed_item_types = [ItemType.MCQ, ItemType.TRUE_FALSE]
+
     # Create session
     session = ActivitySession(
         id=uuid.uuid4(),
@@ -100,6 +109,7 @@ def create_session(
         .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
         .filter(
             Item.is_active.is_(True),
+            Item.type.in_(allowed_item_types),
             ContentUpload.subject_id == session_data.subject_id,
             ContentUpload.term_id == session_data.term_id,
         )
@@ -107,6 +117,21 @@ def create_session(
         .limit(session_data.item_count)
         .all()
     )
+    if session_data.content_upload_id:
+        items = (
+            db.query(Item)
+            .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
+            .filter(
+                Item.is_active.is_(True),
+                Item.type.in_(allowed_item_types),
+                ContentUpload.subject_id == session_data.subject_id,
+                ContentUpload.term_id == session_data.term_id,
+                ContentUpload.id == session_data.content_upload_id,
+            )
+            .order_by(Item.id)
+            .limit(session_data.item_count)
+            .all()
+        )
 
     if not items:
         raise HTTPException(status_code=404, detail="No items found for this subject/term")
@@ -156,6 +181,77 @@ def get_session(
     return session
 
 
+@router.get("/sessions/{session_id}/items", response_model=list[ItemResponse])
+def get_session_items(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    session = db.query(ActivitySession).filter_by(id=session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if session.student_id != student.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif role_name == "tutor":
+        subject = db.get(Subject, session.subject_id)
+        if subject and subject.tutor_id and subject.tutor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
+    items = (
+        db.query(Item)
+        .join(ActivitySessionItem, ActivitySessionItem.item_id == Item.id)
+        .filter(
+            ActivitySessionItem.session_id == session_id,
+            Item.is_active.is_(True),
+        )
+        .order_by(ActivitySessionItem.order_index.asc())
+        .all()
+    )
+    return items
+
+
+def _compute_match_correct(item: Item, response_normalized: str | None) -> bool:
+    if not response_normalized:
+        return False
+    if not item.options or not isinstance(item.options, dict):
+        return False
+    pairs = item.options.get("pairs")
+    if not isinstance(pairs, list):
+        return False
+
+    expected: dict[str, str] = {}
+    for pair in pairs:
+        if not isinstance(pair, dict):
+            continue
+        left = pair.get("left")
+        right = pair.get("right")
+        if isinstance(left, str) and isinstance(right, str):
+            expected[left] = right
+
+    if not expected:
+        return False
+
+    try:
+        submitted = json.loads(response_normalized)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(submitted, dict):
+        return False
+
+    normalized_submitted: dict[str, str] = {}
+    for key, value in submitted.items():
+        if isinstance(key, str) and isinstance(value, str):
+            normalized_submitted[key] = value
+
+    return normalized_submitted == expected
+
+
 @router.post("/sessions/{session_id}/responses", response_model=LearningEventResponse)
 def record_response(
     session_id: uuid.UUID,
@@ -185,6 +281,12 @@ def record_response(
     item = db.query(Item).filter_by(id=event_data.item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    if not item.is_active:
+        raise HTTPException(status_code=400, detail="Item is not active")
+
+    is_correct = event_data.is_correct
+    if item.type == ItemType.MATCH:
+        is_correct = _compute_match_correct(item, event_data.response_normalized)
 
     # Create learning event
     event = LearningEvent(
@@ -202,7 +304,7 @@ def record_response(
         duration_ms=event_data.duration_ms,
         attempt_number=event_data.attempt_number,
         response_normalized=event_data.response_normalized,
-        is_correct=event_data.is_correct,
+        is_correct=is_correct,
         hint_used=event_data.hint_used,
         difficulty_at_time=event_data.difficulty_at_time,
     )
