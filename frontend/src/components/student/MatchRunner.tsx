@@ -44,6 +44,7 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
     const [loading, setLoading] = useState(true);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [activityTypeId, setActivityTypeId] = useState<string | null>(null);
+    const [initError, setInitError] = useState<string>('');
     const [currentIndex, setCurrentIndex] = useState(0);
     const [finished, setFinished] = useState(false);
     const [assignments, setAssignments] = useState<Record<string, string>>({});
@@ -51,16 +52,28 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
     const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
 
     useEffect(() => {
+        let cancelled = false;
+
         const initSession = async () => {
             try {
+                setLoading(true);
+                setInitError('');
+                setItems([]);
+                setSessionId(null);
+                setActivityTypeId(null);
+                setCurrentIndex(0);
+                setFinished(false);
+                setAssignments({});
+                setFeedback(null);
+
                 const typesRes = await api.get("/activities/activity-types");
                 const matchType = typesRes.data.find((t: any) => t.code === "MATCH");
                 if (!matchType) {
                     console.error("MATCH activity type not found");
-                    setLoading(false);
+                    if (!cancelled) setInitError('No se encontró el tipo de actividad MATCH.');
                     return;
                 }
-                setActivityTypeId(matchType.id);
+                if (!cancelled) setActivityTypeId(matchType.id);
 
                 const sessionRes = await api.post("/activities/sessions", {
                     student_id: studentId,
@@ -73,19 +86,34 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
                     device_type: "web",
                 });
                 const sid = sessionRes.data.id;
-                setSessionId(sid);
+                if (!cancelled) setSessionId(sid);
 
                 const itemsRes = await api.get(`/activities/sessions/${sid}/items`);
-                setItems(itemsRes.data);
+                if (!cancelled) setItems(itemsRes.data);
 
-                setQuestionStartTime(new Date());
+                if (!cancelled) setQuestionStartTime(new Date());
             } catch (err: any) {
                 console.error("Error initializing session:", err);
+                const detail = err?.response?.data?.detail;
+                if (!cancelled) {
+                    if (detail === 'Not enough permissions') {
+                        setInitError('Necesitas iniciar sesión como estudiante.');
+                    } else if (typeof detail === 'string' && detail.length > 0) {
+                        setInitError(detail);
+                    } else {
+                        setInitError(err?.message || 'No se pudo iniciar la sesión.');
+                    }
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
+
         initSession();
+
+        return () => {
+            cancelled = true;
+        };
     }, [uploadId, studentId, subjectId, termId]);
 
     const currentItem = items[currentIndex];
@@ -99,7 +127,18 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
     }, [currentIndex]);
 
     if (loading) return <p>Cargando actividad...</p>;
-    if (!sessionId || !activityTypeId) return <p>Error al iniciar la sesión.</p>;
+    if (initError) {
+        return (
+            <div className="card" style={{ maxWidth: "700px", margin: "0 auto" }}>
+                <h3 style={{ marginBottom: "0.75rem" }}>No se pudo iniciar la sesión</h3>
+                <p style={{ color: "var(--error)", marginTop: 0 }}>{initError}</p>
+                <button onClick={onExit} className="btn">
+                    Volver
+                </button>
+            </div>
+        );
+    }
+    if (!sessionId || !activityTypeId) return <p>Cargando sesión...</p>;
     if (items.length === 0) return <p>No hay ítems MATCH disponibles para este contenido.</p>;
 
     const submit = async () => {

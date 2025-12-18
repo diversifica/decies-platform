@@ -4,29 +4,25 @@ import { useEffect, useState } from 'react';
 import api from '../../services/api';
 
 interface UploadFormProps {
-    tutorId?: string;
     subjectId?: string;
     termId?: string;
+    onUploadSuccess?: () => void;
 }
 
-export default function UploadForm({ tutorId: tutorIdProp = '', subjectId: subjectIdProp = '', termId: termIdProp = '' }: UploadFormProps) {
+export default function UploadForm({ subjectId: subjectIdProp = '', termId: termIdProp = '', onUploadSuccess }: UploadFormProps) {
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
-    // Preliminary hardcoded IDs or inputs - For MVP Day 3 we assume user knows them or we default
-    // Ideally these come from Auth context or Dropdowns
-    const [tutorId, setTutorId] = useState(tutorIdProp);
     const [subjectId, setSubjectId] = useState(subjectIdProp);
     const [termId, setTermId] = useState(termIdProp);
 
-    useEffect(() => setTutorId(tutorIdProp), [tutorIdProp]);
     useEffect(() => setSubjectId(subjectIdProp), [subjectIdProp]);
     useEffect(() => setTermId(termIdProp), [termIdProp]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!file || !tutorId || !subjectId || !termId) {
+        if (!file || !subjectId || !termId) {
             setMessage("Por favor completa todos los campos");
             return;
         }
@@ -36,7 +32,6 @@ export default function UploadForm({ tutorId: tutorIdProp = '', subjectId: subje
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('tutor_id', tutorId);
         formData.append('subject_id', subjectId);
         formData.append('term_id', termId);
         // Defaults
@@ -48,10 +43,15 @@ export default function UploadForm({ tutorId: tutorIdProp = '', subjectId: subje
             });
             setMessage(`Subida exitosa: ID ${res.data.id}`);
             setFile(null);
-            // Trigger refresh?
+            onUploadSuccess?.();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Error: ${error.response?.data?.detail || error.message}`);
+            const detail = error.response?.data?.detail;
+            if (detail === 'Not enough permissions') {
+                setMessage('Error: necesitas iniciar sesión como tutor.');
+            } else {
+                setMessage(`Error: ${detail || error.message}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -69,18 +69,6 @@ export default function UploadForm({ tutorId: tutorIdProp = '', subjectId: subje
                         accept=".pdf"
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                         className="input"
-                    />
-                </label>
-
-                <label>
-                    Tutor ID
-                    <input
-                        type="text"
-                        value={tutorId}
-                        onChange={e => setTutorId(e.target.value)}
-                        placeholder="UUID..."
-                        className="input"
-                        disabled={!!tutorIdProp}
                     />
                 </label>
 

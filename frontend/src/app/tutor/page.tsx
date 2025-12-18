@@ -21,6 +21,7 @@ export default function TutorPage() {
     const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
     const [selectedTermId, setSelectedTermId] = useState<string>('');
     const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+    const [uploadsRefreshSignal, setUploadsRefreshSignal] = useState<number>(0);
 
     const getTabStyle = (tabName: string) => ({
         padding: '0.75rem 1.5rem',
@@ -79,6 +80,7 @@ export default function TutorPage() {
                 onAuth={(loadedMe) => {
                     setMe(loadedMe);
                     setSelectedStudentId('');
+                    setUploadsRefreshSignal((v) => v + 1);
                 }}
                 onLogout={() => {
                     setMe(null);
@@ -88,8 +90,18 @@ export default function TutorPage() {
                     setSelectedSubjectId('');
                     setSelectedTermId('');
                     setSelectedStudentId('');
+                    setUploadsRefreshSignal((v) => v + 1);
                 }}
             />
+
+            {me && !isTutor && (
+                <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--error)' }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>Acceso restringido</h3>
+                    <p style={{ margin: 0 }}>
+                        Has iniciado sesión como <strong>{(me.role || 'N/A').toUpperCase()}</strong>. Para subir y procesar contenido, inicia sesión con un usuario tutor.
+                    </p>
+                </div>
+            )}
 
             {isTutor && (
                 <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -128,82 +140,90 @@ export default function TutorPage() {
                 </div>
             )}
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)' }}>
-                <button
-                    onClick={() => setActiveTab('content')}
-                    style={getTabStyle('content')}
-                >
-                    Contenido
-                </button>
-                <button
-                    onClick={() => setActiveTab('metrics')}
-                    style={getTabStyle('metrics')}
-                >
-                    Métricas y Dominio
-                </button>
-                <button
-                    onClick={() => setActiveTab('recommendations')}
-                    style={getTabStyle('recommendations')}
-                >
-                    Recomendaciones
-                </button>
-                <button
-                    onClick={() => setActiveTab('reports')}
-                    style={getTabStyle('reports')}
-                >
-                    Informe
-                </button>
-            </div>
+            {isTutor && (
+                <>
+                    {/* Tabs */}
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)' }}>
+                        <button
+                            onClick={() => setActiveTab('content')}
+                            style={getTabStyle('content')}
+                        >
+                            Contenido
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('metrics')}
+                            style={getTabStyle('metrics')}
+                        >
+                            Métricas y Dominio
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('recommendations')}
+                            style={getTabStyle('recommendations')}
+                        >
+                            Recomendaciones
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('reports')}
+                            style={getTabStyle('reports')}
+                        >
+                            Informe
+                        </button>
+                    </div>
 
-            {/* Content */}
-            {activeTab === 'content' && (
-                <div style={{ display: 'grid', gap: '2rem' }}>
-                    <section>
-                        <UploadForm tutorId={tutorId} subjectId={selectedSubjectId} termId={selectedTermId} />
-                    </section>
-                    <section>
-                        <UploadList tutorId={tutorId} />
-                    </section>
-                </div>
-            )}
+                    {/* Content */}
+                    {activeTab === 'content' && (
+                        <div style={{ display: 'grid', gap: '2rem' }}>
+                            <section>
+                                <UploadForm
+                                    subjectId={selectedSubjectId}
+                                    termId={selectedTermId}
+                                    onUploadSuccess={() => setUploadsRefreshSignal((v) => v + 1)}
+                                />
+                            </section>
+                            <section>
+                                <UploadList refreshSignal={uploadsRefreshSignal} />
+                            </section>
+                        </div>
+                    )}
 
-            {activeTab === 'metrics' && (
-                selectedStudentId && selectedSubjectId && selectedTermId ? (
-                    <MetricsDashboard
-                        studentId={selectedStudentId}
-                        subjectId={selectedSubjectId}
-                        termId={selectedTermId}
-                    />
-                ) : (
-                    <p>Selecciona contexto para ver métricas.</p>
-                )
-            )}
+                    {activeTab === 'metrics' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId ? (
+                            <MetricsDashboard
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver métricas.</p>
+                        )
+                    )}
 
-            {activeTab === 'recommendations' && (
-                selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
-                    <RecommendationList
-                        studentId={selectedStudentId}
-                        subjectId={selectedSubjectId}
-                        termId={selectedTermId}
-                        tutorId={tutorId}
-                    />
-                ) : (
-                    <p>Selecciona contexto para ver recomendaciones.</p>
-                )
-            )}
+                    {activeTab === 'recommendations' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
+                            <RecommendationList
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                                tutorId={tutorId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver recomendaciones.</p>
+                        )
+                    )}
 
-            {activeTab === 'reports' && (
-                selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
-                    <TutorReportPanel
-                        tutorId={tutorId}
-                        studentId={selectedStudentId}
-                        subjectId={selectedSubjectId}
-                        termId={selectedTermId}
-                    />
-                ) : (
-                    <p>Selecciona contexto para ver informes.</p>
-                )
+                    {activeTab === 'reports' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
+                            <TutorReportPanel
+                                tutorId={tutorId}
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver informes.</p>
+                        )
+                    )}
+                </>
             )}
         </div>
     );

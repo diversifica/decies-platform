@@ -25,6 +25,7 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
     const [loading, setLoading] = useState(true);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [activityTypeId, setActivityTypeId] = useState<string | null>(null);
+    const [initError, setInitError] = useState<string>('');
     const [currentIndex, setCurrentIndex] = useState(0);
     const [score, setScore] = useState(0);
     const [finished, setFinished] = useState(false);
@@ -33,17 +34,30 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
     const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
 
     useEffect(() => {
+        let cancelled = false;
+
         const initSession = async () => {
             try {
+                setLoading(true);
+                setInitError('');
+                setItems([]);
+                setSessionId(null);
+                setActivityTypeId(null);
+                setCurrentIndex(0);
+                setScore(0);
+                setFinished(false);
+                setSelectedOption(null);
+                setFeedback(null);
+
                 // 1. Get QUIZ activity type
                 const typesRes = await api.get('/activities/activity-types');
                 const quizType = typesRes.data.find((t: any) => t.code === 'QUIZ');
                 if (!quizType) {
                     console.error('QUIZ activity type not found');
-                    setLoading(false);
+                    if (!cancelled) setInitError('No se encontró el tipo de actividad QUIZ.');
                     return;
                 }
-                setActivityTypeId(quizType.id);
+                if (!cancelled) setActivityTypeId(quizType.id);
 
                 // 2. Create activity session
                 const sessionRes = await api.post('/activities/sessions', {
@@ -56,25 +70,51 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
                     content_upload_id: uploadId,
                     device_type: 'web'
                 });
-                setSessionId(sessionRes.data.id);
+                if (!cancelled) setSessionId(sessionRes.data.id);
 
                 // 3. Get session items (ordered)
                 const sessionItemsRes = await api.get(`/activities/sessions/${sessionRes.data.id}/items`);
-                setItems(sessionItemsRes.data);
-                setQuestionStartTime(new Date());
+                if (!cancelled) {
+                    setItems(sessionItemsRes.data);
+                    setQuestionStartTime(new Date());
+                }
 
             } catch (err: any) {
                 console.error('Error initializing session:', err);
+                const detail = err?.response?.data?.detail;
+                if (!cancelled) {
+                    if (detail === 'Not enough permissions') {
+                        setInitError('Necesitas iniciar sesión como estudiante.');
+                    } else if (typeof detail === 'string' && detail.length > 0) {
+                        setInitError(detail);
+                    } else {
+                        setInitError(err?.message || 'No se pudo iniciar la sesión.');
+                    }
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
+
         initSession();
+
+        return () => {
+            cancelled = true;
+        };
     }, [uploadId, studentId, subjectId, termId]);
 
     if (loading) return <p>Cargando preguntas...</p>;
+    if (initError) {
+        return (
+            <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <h3 style={{ marginBottom: '0.75rem' }}>No se pudo iniciar la sesión</h3>
+                <p style={{ color: 'var(--error)', marginTop: 0 }}>{initError}</p>
+                <button onClick={onExit} className="btn">Volver</button>
+            </div>
+        );
+    }
+    if (!sessionId || !activityTypeId) return <p>Cargando sesión...</p>;
     if (items.length === 0) return <p>No hay preguntas disponibles para este contenido.</p>;
-    if (!sessionId || !activityTypeId) return <p>Error al iniciar la sesión.</p>;
 
     const currentItem = items[currentIndex];
     const options: string[] = Array.isArray(currentItem.options)

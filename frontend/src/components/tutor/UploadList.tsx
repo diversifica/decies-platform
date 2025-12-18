@@ -13,10 +13,10 @@ interface Upload {
 }
 
 interface UploadListProps {
-    tutorId?: string;
+    refreshSignal?: number;
 }
 
-export default function UploadList({ tutorId }: UploadListProps) {
+export default function UploadList({ refreshSignal }: UploadListProps) {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -24,12 +24,17 @@ export default function UploadList({ tutorId }: UploadListProps) {
     const fetchUploads = async () => {
         try {
             setLoading(true);
-            const res = await api.get('/content/uploads', { params: { tutor_id: tutorId || undefined } });
+            const res = await api.get('/content/uploads');
             setUploads(res.data);
             setError('');
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setError('Error cargando uploads');
+            const detail = err?.response?.data?.detail;
+            if (detail === 'Not enough permissions') {
+                setError('Necesitas iniciar sesión como tutor.');
+            } else {
+                setError(detail || err?.message || 'Error cargando uploads');
+            }
         } finally {
             setLoading(false);
         }
@@ -37,7 +42,7 @@ export default function UploadList({ tutorId }: UploadListProps) {
 
     useEffect(() => {
         fetchUploads();
-    }, [tutorId]);
+    }, [refreshSignal]);
 
     if (loading) return <p>Cargando uploads...</p>;
     if (error) return <p style={{ color: 'var(--error)' }}>{error}</p>;
