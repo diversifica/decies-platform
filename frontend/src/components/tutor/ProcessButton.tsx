@@ -11,17 +11,25 @@ interface ProcessButtonProps {
 export default function ProcessButton({ uploadId, onProcessStarted }: ProcessButtonProps) {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+    const [errorMessage, setErrorMessage] = useState<string>('');
 
     const handleProcess = async () => {
         setLoading(true);
         setStatus('processing');
+        setErrorMessage('');
         try {
             await api.post(`/content/uploads/${uploadId}/process`);
             setStatus('success');
             if (onProcessStarted) onProcessStarted();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
             setStatus('error');
+            const detail = error?.response?.data?.detail;
+            if (detail === 'Not enough permissions') {
+                setErrorMessage('Necesitas iniciar sesión como tutor.');
+            } else {
+                setErrorMessage(detail || error?.message || 'Error');
+            }
         } finally {
             setLoading(false);
         }
@@ -41,7 +49,11 @@ export default function ProcessButton({ uploadId, onProcessStarted }: ProcessBut
             >
                 {loading ? 'Iniciando...' : 'Procesar'}
             </button>
-            {status === 'error' && <span style={{ color: 'var(--error)', marginLeft: '0.5rem' }}>Error</span>}
+            {status === 'error' && (
+                <span style={{ color: 'var(--error)', marginLeft: '0.5rem' }}>
+                    {errorMessage || 'Error'}
+                </span>
+            )}
         </div>
     );
 }
