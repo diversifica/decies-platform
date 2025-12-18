@@ -107,9 +107,8 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
         const endTime = new Date();
         const durationMs = endTime.getTime() - questionStartTime.getTime();
 
-        const expected = Object.fromEntries(pairs.map((p) => [p.left, p.right]));
         const isComplete = pairs.every((p) => assignments[p.left]);
-        const isCorrect = isComplete && JSON.stringify(assignments) === JSON.stringify(expected);
+        const isCorrect = isComplete && pairs.every((p) => assignments[p.left] === p.right);
 
         setFeedback({
             isCorrect,
@@ -203,11 +202,17 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
                                 <option value="" disabled>
                                     Selecciona…
                                 </option>
-                                {rightOptions.map((opt) => (
-                                    <option key={opt} value={opt}>
-                                        {opt}
-                                    </option>
-                                ))}
+                                {rightOptions
+                                    .filter((opt) => {
+                                        const current = assignments[pair.left];
+                                        if (opt === current) return true;
+                                        return !Object.values(assignments).includes(opt);
+                                    })
+                                    .map((opt) => (
+                                        <option key={opt} value={opt}>
+                                            {opt}
+                                        </option>
+                                    ))}
                             </select>
                         </Fragment>
                     ))}
