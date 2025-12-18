@@ -90,6 +90,8 @@ export default function QuizRunner({ uploadId, studentId, subjectId, termId, onE
                 if (!cancelled) {
                     if (detail === 'Not enough permissions') {
                         setInitError('Necesitas iniciar sesión como estudiante.');
+                    } else if (detail === 'No items found for this subject/term') {
+                        setInitError('Este contenido aún no tiene preguntas de Quiz. Pide al tutor que lo procese.');
                     } else if (typeof detail === 'string' && detail.length > 0) {
                         setInitError(detail);
                     } else {
