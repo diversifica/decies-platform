@@ -41,6 +41,11 @@ class KnowledgeChunk(Base):
         ),
         nullable=False,
     )
+    microconcept_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("microconcepts.id", name="knowledge_chunks_microconcept_id_fkey"),
+        nullable=True,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     index: Mapped[int] = mapped_column(nullable=False, default=0)
     embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

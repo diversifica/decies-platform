@@ -3,8 +3,10 @@ import os
 import uuid
 
 import pypdf
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.content import ContentUpload
 from app.models.item import Item, ItemType
 from app.models.knowledge import KnowledgeChunk, KnowledgeEntry
@@ -29,7 +31,7 @@ def extract_text_from_pdf(file_path: str) -> str:
 
 def process_content_upload(db: Session, upload_id: uuid.UUID):
     """
-    Orchestrates the LLM pipeline (E2 + E4) for a given upload.
+    Orchestrates the LLM pipeline (E2 + E3 + E4) for a given upload.
     """
     logger.info(f"Starting processing for upload {upload_id}")
 
@@ -43,7 +45,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
         .filter(
             MicroConcept.subject_id == upload.subject_id,
             MicroConcept.term_id == upload.term_id,
-            MicroConcept.active == True,  # noqa: E712
+            MicroConcept.active.is_(True),
         )
         .order_by(MicroConcept.created_at.asc())
         .first()
@@ -61,6 +63,18 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
         )
         db.add(default_microconcept)
         db.flush()
+
+    microconcepts = (
+        db.query(MicroConcept)
+        .filter(
+            MicroConcept.subject_id == upload.subject_id,
+            MicroConcept.active.is_(True),
+            or_(MicroConcept.term_id == upload.term_id, MicroConcept.term_id.is_(None)),
+        )
+        .order_by(MicroConcept.created_at.asc())
+        .all()
+    )
+    microconcept_ids = {mc.id for mc in microconcepts}
 
     # Translate relative path to absolute if needed
     # (Assuming StorageService behaves consistently, here we need absolute file path to open)
@@ -128,7 +142,46 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
         db.commit()
         raise
 
-    # 4. E4: Items (for each chunk)
+    # 4. E3: Map chunks to microconcepts
+    logger.info("Running E3: Map")
+    e3_min_confidence = 0.6
+
+    microconcept_catalog = [
+        {"id": str(mc.id), "code": mc.code, "name": mc.name} for mc in microconcepts
+    ]
+    chunks_from_e2 = [{"chunk_type": "chunk", "content": chunk.content} for chunk in chunks]
+
+    try:
+        e3_result = llm_service.map_chunks_to_microconcepts_e3(
+            microconcept_catalog=microconcept_catalog,
+            chunks_from_e2=chunks_from_e2,
+        )
+
+        run_e3 = LLMRun(step=LLMRunStep.E3_MAP, model=settings.LLM_MODEL_NAME, status="success")
+        db.add(run_e3)
+
+        mapping_by_index = {m.chunk_index: m for m in e3_result.chunk_mappings}
+        for chunk in chunks:
+            mapping = mapping_by_index.get(chunk.index)
+            if not mapping:
+                continue
+            mapped_id = mapping.microconcept_match.microconcept_id
+            if not mapped_id:
+                continue
+            if mapping.confidence < e3_min_confidence:
+                continue
+            if mapped_id not in microconcept_ids:
+                continue
+            chunk.microconcept_id = mapped_id
+
+        db.flush()
+
+    except Exception as e:
+        logger.error(f"E3 failed: {e}")
+        run_e3 = LLMRun(step=LLMRunStep.E3_MAP, model="unknown", status="failed")
+        db.add(run_e3)
+
+    # 5. E4: Items (for each chunk)
     logger.info("Running E4: Items")
     for chunk in chunks:
         try:
@@ -154,7 +207,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
 
                 item = Item(
                     content_upload_id=upload.id,
-                    microconcept_id=default_microconcept.id,
+                    microconcept_id=chunk.microconcept_id or default_microconcept.id,
                     type=itype,
                     stem=item_data["stem"],
                     options=item_data.get("options"),
