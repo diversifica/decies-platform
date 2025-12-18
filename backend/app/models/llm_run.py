@@ -11,6 +11,7 @@ from app.core.db import Base
 
 class LLMRunStep(str, enum.Enum):
     E2_STRUCTURE = "E2_STRUCTURE"
+    E3_MAP = "E3_MAP"
     E4_ITEMS = "E4_ITEMS"
 
 

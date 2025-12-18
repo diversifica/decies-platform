@@ -37,6 +37,10 @@ MOCK_E4_RESPONSE = {
         }
     ]
 }
+MOCK_E3_RESPONSE_BASE = {
+    "chunk_mappings": [],
+    "quality": {"mapping_coverage": 1.0, "mapping_precision_hint": "high", "notes": ["ok"]},
+}
 
 
 @pytest.fixture
@@ -86,6 +90,25 @@ def test_process_pipeline_success(db_session):
     db_session.add(term)
     db_session.flush()
 
+    mc_1 = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="PIPE_MC_001",
+        name="Algebra",
+        description="...",
+        active=True,
+    )
+    mc_2 = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="PIPE_MC_002",
+        name="Funciones",
+        description="...",
+        active=True,
+    )
+    db_session.add_all([mc_1, mc_2])
+    db_session.flush()
+
     unique_suffix = str(uuid.uuid4())
     upload = ContentUpload(
         tutor_id=tutor.id,
@@ -124,8 +147,8 @@ def test_process_pipeline_success(db_session):
         mock_instance = mock_openai.return_value
 
         # We need to simulate TWO calls to create().
-        # side_effect list: first call returns E2, second call... returns E4 (for each chunk).
-        # We have 2 chunks in E2 mock -> so 1 E2 call + 2 E4 calls = 3 calls total.
+        # side_effect list: first call returns E2, second call returns E3, then E4 (for each chunk).
+        # We have 2 chunks in E2 mock -> so 1 E2 call + 1 E3 call + 2 E4 calls = 4 calls total.
 
         # Mock Response Object
         def create_mock_response(content_dict):
@@ -137,8 +160,35 @@ def test_process_pipeline_success(db_session):
             mock_choice.choices = [mock_msg]
             return mock_choice
 
+        mock_e3_response = {
+            **MOCK_E3_RESPONSE_BASE,
+            "chunk_mappings": [
+                {
+                    "chunk_index": 0,
+                    "microconcept_match": {
+                        "microconcept_id": str(mc_1.id),
+                        "microconcept_code": mc_1.code,
+                        "microconcept_name": mc_1.name,
+                    },
+                    "confidence": 0.9,
+                    "reason": "Algebra",
+                },
+                {
+                    "chunk_index": 1,
+                    "microconcept_match": {
+                        "microconcept_id": str(mc_2.id),
+                        "microconcept_code": mc_2.code,
+                        "microconcept_name": mc_2.name,
+                    },
+                    "confidence": 0.9,
+                    "reason": "Funciones",
+                },
+            ],
+        }
+
         mock_instance.chat.completions.create.side_effect = [
             create_mock_response(MOCK_E2_RESPONSE),  # E2
+            create_mock_response(mock_e3_response),  # E3
             create_mock_response(MOCK_E4_RESPONSE),  # E4 for Chunk 1
             create_mock_response(MOCK_E4_RESPONSE),  # E4 for Chunk 2
         ]
@@ -159,19 +209,21 @@ def test_process_pipeline_success(db_session):
         # Check Chunks
         chunks = db_session.query(KnowledgeChunk).filter_by(knowledge_entry_id=entry.id).all()
         assert len(chunks) == 2
+        assert {c.microconcept_id for c in chunks} == {mc_1.id, mc_2.id}
 
         # Check Items
         items = db_session.query(Item).filter_by(content_upload_id=upload_id).all()
         assert len(items) == 2
         assert items[0].stem == "What is fun?"
         assert all(item.microconcept_id is not None for item in items)
+        assert {item.microconcept_id for item in items} == {mc_1.id, mc_2.id}
 
         microconcepts = (
             db_session.query(MicroConcept)
             .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
             .all()
         )
-        assert len(microconcepts) >= 1
+        assert len(microconcepts) >= 2
 
         # 5. Verify GET /items Endpoint
         response_items = client.get(f"/api/v1/content/uploads/{upload_id}/items", headers=headers)

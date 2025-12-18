@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 import openai
 from pydantic import BaseModel
@@ -16,6 +17,30 @@ class StructureResult(BaseModel):
 
 class ItemResult(BaseModel):
     items: list[dict]
+
+
+class MicroconceptMatch(BaseModel):
+    microconcept_id: uuid.UUID | None = None
+    microconcept_code: str | None = None
+    microconcept_name: str | None = None
+
+
+class ChunkMapping(BaseModel):
+    chunk_index: int
+    microconcept_match: MicroconceptMatch
+    confidence: float
+    reason: str
+
+
+class MappingQuality(BaseModel):
+    mapping_coverage: float
+    mapping_precision_hint: str
+    notes: list[str]
+
+
+class E3MapResult(BaseModel):
+    chunk_mappings: list[ChunkMapping]
+    quality: MappingQuality
 
 
 class LLMService:
@@ -122,3 +147,68 @@ class LLMService:
         content_str = response.choices[0].message.content
         data = json.loads(content_str)
         return ItemResult(items=data["items"])
+
+    def map_chunks_to_microconcepts_e3(
+        self,
+        microconcept_catalog: list[dict],
+        chunks_from_e2: list[dict],
+    ) -> E3MapResult:
+        if not self.client:
+            raise ValueError("LLM Client not configured")
+
+        payload = {
+            "microconcept_catalog": microconcept_catalog,
+            "chunks_from_E2": chunks_from_e2,
+        }
+
+        prompt = f"""
+        Estás mapeando chunks de contenido a microconceptos existentes.
+
+        Reglas:
+        1) Para cada chunk, elige un microconcepto existente si encaja claramente.
+        2) Si la confianza es baja, no asignes microconcepto (microconcept_id: null).
+        3) Prioriza precisión sobre cobertura.
+
+        Entrada JSON:
+        {json.dumps(payload, ensure_ascii=False)}
+
+        Devuelve SOLO JSON válido con este formato:
+        {{
+          "chunk_mappings": [
+            {{
+              "chunk_index": 0,
+              "microconcept_match": {{
+                "microconcept_id": "uuid-or-null",
+                "microconcept_code": "string-or-null",
+                "microconcept_name": "string-or-null"
+              }},
+              "confidence": 0.0,
+              "reason": "string"
+            }}
+          ],
+          "quality": {{
+            "mapping_coverage": 0.0,
+            "mapping_precision_hint": "low|medium|high",
+            "notes": ["string"]
+          }}
+        }}
+        """
+
+        response = self.client.chat.completions.create(
+            model=settings.LLM_MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres un asistente educativo útil. "
+                        "Devuelve únicamente JSON válido conforme al esquema."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        content_str = response.choices[0].message.content
+        data = json.loads(content_str)
+        return E3MapResult.model_validate(data)

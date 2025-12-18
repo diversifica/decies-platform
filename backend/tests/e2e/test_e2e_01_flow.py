@@ -24,6 +24,31 @@ client = TestClient(app)
 
 MOCK_PDF_TEXT = "Contenido de prueba de matemáticas: suma, resta y números enteros."
 MOCK_E2_RESPONSE = {"summary": "Resumen", "chunks": ["Chunk 1", "Chunk 2"]}
+MOCK_E3_RESPONSE = {
+    "chunk_mappings": [
+        {
+            "chunk_index": 0,
+            "microconcept_match": {
+                "microconcept_id": None,
+                "microconcept_code": None,
+                "microconcept_name": None,
+            },
+            "confidence": 0.0,
+            "reason": "low confidence",
+        },
+        {
+            "chunk_index": 1,
+            "microconcept_match": {
+                "microconcept_id": None,
+                "microconcept_code": None,
+                "microconcept_name": None,
+            },
+            "confidence": 0.0,
+            "reason": "low confidence",
+        },
+    ],
+    "quality": {"mapping_coverage": 0.0, "mapping_precision_hint": "low", "notes": ["n/a"]},
+}
 MOCK_E4_RESPONSE = {
     "items": [
         {
@@ -150,6 +175,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
         mock_instance = mock_openai.return_value
         mock_instance.chat.completions.create.side_effect = [
             _create_mock_response(MOCK_E2_RESPONSE),
+            _create_mock_response(MOCK_E3_RESPONSE),
             _create_mock_response(MOCK_E4_RESPONSE),
             _create_mock_response(MOCK_E4_RESPONSE),
         ]
