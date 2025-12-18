@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.security import get_password_hash
 from app.main import app
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item
@@ -52,18 +53,18 @@ def db_session():
 
 def test_process_pipeline_success(db_session):
     # 1. Setup Data (Tutor, Upload)
-    role_name = "Tutor_Pipeline"
-    role_tutor = db_session.query(Role).filter_by(name=role_name).first()
+    role_tutor = db_session.query(Role).filter_by(name="tutor").first()
     if not role_tutor:
-        role_tutor = Role(name=role_name)
+        role_tutor = Role(name="tutor")
         db_session.add(role_tutor)
         db_session.commit()
 
     user_id = uuid.uuid4()
+    password = "pw"
     user = User(
         id=user_id,
         email=f"tutor_{user_id}@pipeline.com",
-        hashed_password="pw",
+        hashed_password=get_password_hash(password),
         is_active=True,
         role_id=role_tutor.id,
     )
@@ -72,6 +73,7 @@ def test_process_pipeline_success(db_session):
 
     tutor = Tutor(user_id=user.id, display_name="Pipeline Tutor")
     db_session.add(tutor)
+    db_session.flush()
 
     subject = Subject(name="Pipeline Math", tutor_id=user.id)
     db_session.add(subject)
@@ -99,6 +101,14 @@ def test_process_pipeline_success(db_session):
     db_session.commit()
 
     upload_id = upload.id
+
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": user.email, "password": password},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
 
     # Set Fake API Key for LLM Service Check
     settings.OPENAI_API_KEY = "fake-key"
@@ -134,7 +144,7 @@ def test_process_pipeline_success(db_session):
         ]
 
         # 3. Trigger Endpoint
-        response = client.post(f"/api/v1/content/uploads/{upload_id}/process")
+        response = client.post(f"/api/v1/content/uploads/{upload_id}/process", headers=headers)
         assert response.status_code == 202
 
         # 4. Verify Background Execution
@@ -164,7 +174,7 @@ def test_process_pipeline_success(db_session):
         assert len(microconcepts) >= 1
 
         # 5. Verify GET /items Endpoint
-        response_items = client.get(f"/api/v1/content/uploads/{upload_id}/items")
+        response_items = client.get(f"/api/v1/content/uploads/{upload_id}/items", headers=headers)
         assert response_items.status_code == 200
         data = response_items.json()
         assert len(data) == 2

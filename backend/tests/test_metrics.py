@@ -1,37 +1,43 @@
-import pytest
 from fastapi.testclient import TestClient
 
-from app.core.db import SessionLocal
 from app.main import app
-from app.models.student import Student
-from app.models.subject import Subject
-from app.models.term import Term
 
 client = TestClient(app)
 
 
-@pytest.fixture
-def db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def _login(email: str, password: str) -> dict[str, str]:
+    token_res = client.post(
+        "/api/v1/login/access-token", json={"email": email, "password": password}
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_student_metrics(db_session):
+def test_get_student_metrics():
     """Test getting student metrics"""
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    headers = _login("tutor@decies.com", "decies")
 
-    assert student is not None
-    assert subject is not None
-    assert term is not None
+    subjects_res = client.get("/api/v1/catalog/subjects", headers=headers, params={"mine": "true"})
+    assert subjects_res.status_code == 200
+    subject_id = subjects_res.json()[0]["id"]
+
+    terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
+    assert terms_res.status_code == 200
+    term_id = terms_res.json()[0]["id"]
+
+    students_res = client.get(
+        "/api/v1/catalog/students",
+        headers=headers,
+        params={"mine": "true", "subject_id": subject_id},
+    )
+    assert students_res.status_code == 200
+    student_id = students_res.json()[0]["id"]
 
     response = client.get(
-        f"/api/v1/metrics/students/{student.id}/metrics",
-        params={"subject_id": str(subject.id), "term_id": str(term.id)},
+        f"/api/v1/metrics/students/{student_id}/metrics",
+        params={"subject_id": subject_id, "term_id": term_id},
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -40,18 +46,33 @@ def test_get_student_metrics(db_session):
     assert "first_attempt_accuracy" in data
     assert "median_response_time_ms" in data
     assert "total_sessions" in data
-    assert data["student_id"] == str(student.id)
+    assert data["student_id"] == student_id
 
 
-def test_get_mastery_states(db_session):
+def test_get_mastery_states():
     """Test getting mastery states for a student"""
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    headers = _login("tutor@decies.com", "decies")
+
+    subjects_res = client.get("/api/v1/catalog/subjects", headers=headers, params={"mine": "true"})
+    assert subjects_res.status_code == 200
+    subject_id = subjects_res.json()[0]["id"]
+
+    terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
+    assert terms_res.status_code == 200
+    term_id = terms_res.json()[0]["id"]
+
+    students_res = client.get(
+        "/api/v1/catalog/students",
+        headers=headers,
+        params={"mine": "true", "subject_id": subject_id},
+    )
+    assert students_res.status_code == 200
+    student_id = students_res.json()[0]["id"]
 
     response = client.get(
-        f"/api/v1/metrics/students/{student.id}/mastery",
-        params={"subject_id": str(subject.id), "term_id": str(term.id)},
+        f"/api/v1/metrics/students/{student_id}/mastery",
+        params={"subject_id": subject_id, "term_id": term_id},
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -68,19 +89,34 @@ def test_get_mastery_states(db_session):
         assert state["status"] in ["dominant", "in_progress", "at_risk"]
 
 
-def test_recalculate_metrics(db_session):
+def test_recalculate_metrics():
     """Test manual metrics recalculation"""
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    headers = _login("tutor@decies.com", "decies")
+
+    subjects_res = client.get("/api/v1/catalog/subjects", headers=headers, params={"mine": "true"})
+    assert subjects_res.status_code == 200
+    subject_id = subjects_res.json()[0]["id"]
+
+    terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
+    assert terms_res.status_code == 200
+    term_id = terms_res.json()[0]["id"]
+
+    students_res = client.get(
+        "/api/v1/catalog/students",
+        headers=headers,
+        params={"mine": "true", "subject_id": subject_id},
+    )
+    assert students_res.status_code == 200
+    student_id = students_res.json()[0]["id"]
 
     response = client.post(
         "/api/v1/metrics/recalculate",
         params={
-            "student_id": str(student.id),
-            "subject_id": str(subject.id),
-            "term_id": str(term.id),
+            "student_id": student_id,
+            "subject_id": subject_id,
+            "term_id": term_id,
         },
+        headers=headers,
     )
 
     assert response.status_code == 200

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.main import app
 from app.models.activity import ActivityType
 from app.models.item import Item
@@ -70,17 +71,19 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
 
     db_session.commit()
 
+    password = "pw"
+
     tutor_user = User(
         id=uuid.uuid4(),
-        email=f"t_{uid}@e2e.test",
-        hashed_password="x",
+        email=f"t_{uid}@example.com",
+        hashed_password=get_password_hash(password),
         is_active=True,
         role_id=role_tutor.id,
     )
     student_user = User(
         id=uuid.uuid4(),
-        email=f"s_{uid}@e2e.test",
-        hashed_password="x",
+        email=f"s_{uid}@example.com",
+        hashed_password=get_password_hash(password),
         is_active=True,
         role_id=role_student.id,
     )
@@ -90,6 +93,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
     tutor = Tutor(user_id=tutor_user.id, display_name="Tutor E2E")
     student = Student(user_id=student_user.id)
     db_session.add_all([tutor, student])
+    db_session.flush()
 
     year = AcademicYear(
         name=f"2025-2026-{uid}",
@@ -110,6 +114,20 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
 
     db_session.commit()
 
+    tutor_token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": tutor_user.email, "password": password},
+    )
+    assert tutor_token_res.status_code == 200
+    tutor_headers = {"Authorization": f"Bearer {tutor_token_res.json()['access_token']}"}
+
+    student_token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": student_user.email, "password": password},
+    )
+    assert student_token_res.status_code == 200
+    student_headers = {"Authorization": f"Bearer {student_token_res.json()['access_token']}"}
+
     files = {"file": ("test.pdf", b"fake pdf", "application/pdf")}
     data = {
         "subject_id": str(subject.id),
@@ -117,7 +135,9 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
         "upload_type": "pdf",
         "tutor_id": str(tutor.id),
     }
-    upload_res = client.post("/api/v1/content/uploads", files=files, data=data)
+    upload_res = client.post(
+        "/api/v1/content/uploads", files=files, data=data, headers=tutor_headers
+    )
     assert upload_res.status_code == 201
     upload_id = upload_res.json()["id"]
 
@@ -134,7 +154,10 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
             _create_mock_response(MOCK_E4_RESPONSE),
         ]
 
-        process_res = client.post(f"/api/v1/content/uploads/{upload_id}/process")
+        process_res = client.post(
+            f"/api/v1/content/uploads/{upload_id}/process",
+            headers=tutor_headers,
+        )
         assert process_res.status_code == 202
 
     db_session.expire_all()
@@ -161,6 +184,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
             "item_count": 2,
             "device_type": "web",
         },
+        headers=student_headers,
     )
     assert session_res.status_code == 200
     session_id = session_res.json()["id"]
@@ -187,15 +211,17 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
                 "timestamp_start": start_time.isoformat(),
                 "timestamp_end": end_time.isoformat(),
             },
+            headers=student_headers,
         )
         assert response_res.status_code == 200
 
-    end_res = client.post(f"/api/v1/activities/sessions/{session_id}/end")
+    end_res = client.post(f"/api/v1/activities/sessions/{session_id}/end", headers=student_headers)
     assert end_res.status_code == 200
 
     metrics_res = client.get(
         f"/api/v1/metrics/students/{student.id}/metrics",
         params={"subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=tutor_headers,
     )
     assert metrics_res.status_code == 200
     metrics_payload = metrics_res.json()
@@ -205,6 +231,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
     mastery_res = client.get(
         f"/api/v1/metrics/students/{student.id}/mastery",
         params={"subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=tutor_headers,
     )
     assert mastery_res.status_code == 200
     mastery_payload = mastery_res.json()
@@ -214,6 +241,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
     recs_res = client.get(
         f"/api/v1/recommendations/students/{student.id}",
         params={"subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=tutor_headers,
     )
     assert recs_res.status_code == 200
     recs = recs_res.json()
@@ -229,11 +257,12 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
             "tutor_id": str(tutor.id),
             "recommendation_id": r01["id"],
         },
+        headers=tutor_headers,
     )
     assert decision_res.status_code == 200
     assert decision_res.json()["decision"] == "accepted"
 
-    get_rec_res = client.get(f"/api/v1/recommendations/{r01['id']}")
+    get_rec_res = client.get(f"/api/v1/recommendations/{r01['id']}", headers=tutor_headers)
     assert get_rec_res.status_code == 200
     assert get_rec_res.json()["status"] == "accepted"
 
@@ -245,6 +274,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
             "term_id": str(term.id),
             "generate_recommendations": "true",
         },
+        headers=tutor_headers,
     )
     assert report_res.status_code == 201
     report = report_res.json()
@@ -254,6 +284,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
     latest_res = client.get(
         f"/api/v1/reports/students/{student.id}/latest",
         params={"tutor_id": str(tutor.id), "subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=tutor_headers,
     )
     assert latest_res.status_code == 200
     assert latest_res.json()["id"] == report["id"]

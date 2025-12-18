@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 import pytest
@@ -25,13 +26,25 @@ def db_session():
 
 def test_create_activity_session(db_session):
     """Test creating an activity session"""
-    # Get existing data from seed
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
 
-    assert student is not None
     assert subject is not None
     assert term is not None
     assert activity_type is not None
@@ -48,6 +61,7 @@ def test_create_activity_session(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -58,10 +72,24 @@ def test_create_activity_session(db_session):
 
 def test_record_learning_event(db_session):
     """Test recording a learning event"""
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
     # Create a session first
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
     item = db_session.query(Item).first()
 
@@ -76,6 +104,7 @@ def test_record_learning_event(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
     )
     session_id = session_response.json()["id"]
 
@@ -102,6 +131,7 @@ def test_record_learning_event(db_session):
             "timestamp_start": start_time.isoformat(),
             "timestamp_end": end_time.isoformat(),
         },
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -112,9 +142,23 @@ def test_record_learning_event(db_session):
 
 def test_end_session(db_session):
     """Test ending a session and triggering metrics recalculation"""
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
 
     # Create session
@@ -129,11 +173,12 @@ def test_end_session(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
     )
     session_id = session_response.json()["id"]
 
     # End session
-    response = client.post(f"/api/v1/activities/sessions/{session_id}/end")
+    response = client.post(f"/api/v1/activities/sessions/{session_id}/end", headers=headers)
 
     assert response.status_code == 200
     data = response.json()

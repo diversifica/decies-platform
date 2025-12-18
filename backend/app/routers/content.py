@@ -14,9 +14,17 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.deps import (
+    get_current_active_user,
+    get_current_role_name,
+    get_current_student,
+    get_current_tutor,
+)
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item
+from app.models.subject import Subject
 from app.models.tutor import Tutor
+from app.models.user import User
 from app.pipelines.processing import process_content_upload
 from app.schemas.content import ContentUploadResponse
 from app.schemas.item import ItemResponse
@@ -41,13 +49,17 @@ def upload_content(
     file: Annotated[UploadFile, File()],
     topic_id: Annotated[uuid.UUID | None, Form()] = None,
     tutor_id: Annotated[uuid.UUID | None, Form()] = None,
-    # current_tutor: Tutor = Depends(get_current_active_tutor), # TODO
+    current_tutor: Tutor = Depends(get_current_tutor),
     db: Session = Depends(get_db),
 ):
-    # TODO: Real Auth. Mocking Tutor for Day 1 if no auth system.
-    # We need a Tutor in DB.
-    # For Sprint 1 Day 1, we can require a "X-Tutor-ID" header temporarily if Auth not ready?
-    # Or impl basic dependency.
+    if tutor_id and tutor_id != current_tutor.id:
+        raise HTTPException(status_code=403, detail="Tutor mismatch")
+
+    subject = db.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    if subject.tutor_id and subject.tutor_id != current_tutor.user_id:
+        raise HTTPException(status_code=403, detail="Subject not owned by tutor")
 
     # 1. Save file
     try:
@@ -55,23 +67,9 @@ def upload_content(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File storage failed: {str(e)}")
 
-    # 2. Get Tutor
-    target_tutor = None
-    if tutor_id:
-        target_tutor = db.query(Tutor).filter(Tutor.id == tutor_id).first()
-        if not target_tutor:
-            raise HTTPException(status_code=404, detail=f"Tutor {tutor_id} not found")
-    else:
-        # Fallback to first
-        target_tutor = db.query(Tutor).first()
-        if not target_tutor:
-            raise HTTPException(status_code=403, detail="No authenticated tutor found")
-
-    final_tutor_id = target_tutor.id
-
     # 3. Create DB Record
     db_content = ContentUpload(
-        tutor_id=final_tutor_id,
+        tutor_id=current_tutor.id,
         subject_id=subject_id,
         term_id=term_id,
         topic_id=topic_id,
@@ -92,18 +90,31 @@ def upload_content(
 def get_uploads(
     tutor_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    tutor = db.get(Tutor, tutor_id) if tutor_id else db.query(Tutor).first()
-    if not tutor:
-        return []
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "tutor":
+        current_tutor = db.query(Tutor).filter(Tutor.user_id == current_user.id).first()
+        if not current_tutor:
+            return []
+        if tutor_id and tutor_id != current_tutor.id:
+            raise HTTPException(status_code=403, detail="Tutor mismatch")
+        return db.query(ContentUpload).filter(ContentUpload.tutor_id == current_tutor.id).all()
 
-    return db.query(ContentUpload).filter(ContentUpload.tutor_id == tutor.id).all()
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if not student.subject_id:
+            return []
+        return db.query(ContentUpload).filter(ContentUpload.subject_id == student.subject_id).all()
+
+    raise HTTPException(status_code=403, detail="Role not allowed")
 
 
 @router.post("/uploads/{upload_id}/process", status_code=status.HTTP_202_ACCEPTED)
 def process_upload(
     upload_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    current_tutor: Tutor = Depends(get_current_tutor),
     db: Session = Depends(get_db),
 ):
     """
@@ -113,6 +124,8 @@ def process_upload(
     upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
+    if upload.tutor_id != current_tutor.id:
+        raise HTTPException(status_code=403, detail="Upload not owned by tutor")
 
     # Ensure running in background (for Day 2 Smoke Check simplicity)
     # Note: We pass a new DB session or handle session within the task.
@@ -142,6 +155,7 @@ def run_pipeline_task(upload_id: uuid.UUID):
 @router.get("/uploads/{upload_id}/items", response_model=list[ItemResponse])
 def get_upload_items(
     upload_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -151,6 +165,18 @@ def get_upload_items(
     upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
+
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "tutor":
+        current_tutor = db.query(Tutor).filter(Tutor.user_id == current_user.id).first()
+        if not current_tutor or upload.tutor_id != current_tutor.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if not student.subject_id or upload.subject_id != student.subject_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
 
     items = db.query(Item).filter(Item.content_upload_id == upload_id).all()
     return items

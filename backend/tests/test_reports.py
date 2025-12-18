@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.main import app
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
@@ -43,16 +44,17 @@ def test_generate_and_get_latest_report(db_session: Session):
 
     db_session.commit()
 
+    password = "pw"
     tutor_user = User(
         id=uuid.uuid4(),
-        email=f"t_{uid}@report.test",
-        hashed_password="x",
+        email=f"t_{uid}@example.com",
+        hashed_password=get_password_hash(password),
         is_active=True,
         role_id=role_tutor.id,
     )
     student_user = User(
         id=uuid.uuid4(),
-        email=f"s_{uid}@report.test",
+        email=f"s_{uid}@example.com",
         hashed_password="x",
         is_active=True,
         role_id=role_student.id,
@@ -107,6 +109,14 @@ def test_generate_and_get_latest_report(db_session: Session):
     db_session.add_all([metrics, mastery])
     db_session.commit()
 
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": tutor_user.email, "password": password},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     generate_res = client.post(
         f"/api/v1/reports/students/{student.id}/generate",
         params={
@@ -115,6 +125,7 @@ def test_generate_and_get_latest_report(db_session: Session):
             "term_id": str(term.id),
             "generate_recommendations": "true",
         },
+        headers=headers,
     )
     assert generate_res.status_code == 201
     payload = generate_res.json()
@@ -125,6 +136,7 @@ def test_generate_and_get_latest_report(db_session: Session):
     latest_res = client.get(
         f"/api/v1/reports/students/{student.id}/latest",
         params={"tutor_id": str(tutor.id), "subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=headers,
     )
     assert latest_res.status_code == 200
     latest = latest_res.json()
@@ -141,6 +153,7 @@ def test_generate_and_get_latest_report(db_session: Session):
             "term_id": str(term.id),
             "limit": 10,
         },
+        headers=headers,
     )
     assert list_res.status_code == 200
     reports = list_res.json()
@@ -149,6 +162,7 @@ def test_generate_and_get_latest_report(db_session: Session):
     get_res = client.get(
         f"/api/v1/reports/{payload['id']}",
         params={"tutor_id": str(tutor.id)},
+        headers=headers,
     )
     assert get_res.status_code == 200
     report = get_res.json()
