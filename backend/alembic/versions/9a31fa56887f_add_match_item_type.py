@@ -23,7 +23,7 @@ def upgrade() -> None:
         """
         DO $$
         BEGIN
-            ALTER TYPE item_type ADD VALUE 'match';
+            ALTER TYPE item_type ADD VALUE 'MATCH';
         EXCEPTION
             WHEN duplicate_object THEN NULL;
         END $$;
