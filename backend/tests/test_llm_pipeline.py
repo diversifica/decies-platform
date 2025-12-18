@@ -41,6 +41,10 @@ MOCK_E3_RESPONSE_BASE = {
     "chunk_mappings": [],
     "quality": {"mapping_coverage": 1.0, "mapping_precision_hint": "high", "notes": ["ok"]},
 }
+MOCK_E5_RESPONSE_BASE = {
+    "validated_items": [],
+    "quality": {"kept": 0, "fixed": 0, "dropped": 0, "notes": ["ok"]},
+}
 
 
 @pytest.fixture
@@ -191,6 +195,52 @@ def test_process_pipeline_success(db_session):
             create_mock_response(mock_e3_response),  # E3
             create_mock_response(MOCK_E4_RESPONSE),  # E4 for Chunk 1
             create_mock_response(MOCK_E4_RESPONSE),  # E4 for Chunk 2
+            create_mock_response(
+                {
+                    **MOCK_E5_RESPONSE_BASE,
+                    "validated_items": [
+                        {
+                            "index": 0,
+                            "status": "ok",
+                            "reason": "ok",
+                            "item": {
+                                "item_type": "mcq",
+                                "stem": "What is fun?",
+                                "options": ["Algebra", "Nothing"],
+                                "correct_answer": "Algebra",
+                                "explanation": "Because it is.",
+                                "difficulty": 1.0,
+                                "microconcept_ref": {
+                                    "microconcept_id": str(mc_1.id),
+                                    "microconcept_code": mc_1.code,
+                                    "microconcept_name": mc_1.name,
+                                },
+                                "source_chunk_index": 0,
+                            },
+                        },
+                        {
+                            "index": 1,
+                            "status": "ok",
+                            "reason": "ok",
+                            "item": {
+                                "item_type": "mcq",
+                                "stem": "What is fun?",
+                                "options": ["Algebra", "Nothing"],
+                                "correct_answer": "Algebra",
+                                "explanation": "Because it is.",
+                                "difficulty": 1.0,
+                                "microconcept_ref": {
+                                    "microconcept_id": str(mc_2.id),
+                                    "microconcept_code": mc_2.code,
+                                    "microconcept_name": mc_2.name,
+                                },
+                                "source_chunk_index": 1,
+                            },
+                        },
+                    ],
+                    "quality": {"kept": 2, "fixed": 0, "dropped": 0, "notes": ["ok"]},
+                }
+            ),  # E5
         ]
 
         # 3. Trigger Endpoint

@@ -43,6 +43,42 @@ class E3MapResult(BaseModel):
     quality: MappingQuality
 
 
+class ItemMicroconceptRef(BaseModel):
+    microconcept_id: uuid.UUID | None = None
+    microconcept_code: str | None = None
+    microconcept_name: str | None = None
+
+
+class CanonicalItem(BaseModel):
+    item_type: str
+    stem: str
+    options: list[str] | None = None
+    correct_answer: str
+    explanation: str | None = None
+    difficulty: float = 1.0
+    microconcept_ref: ItemMicroconceptRef
+    source_chunk_index: int
+
+
+class ValidatedItem(BaseModel):
+    index: int
+    status: str
+    reason: str
+    item: CanonicalItem
+
+
+class E5Quality(BaseModel):
+    kept: int
+    fixed: int
+    dropped: int
+    notes: list[str]
+
+
+class E5ValidationResult(BaseModel):
+    validated_items: list[ValidatedItem]
+    quality: E5Quality
+
+
 class LLMService:
     def __init__(self):
         self.client = None
@@ -212,3 +248,80 @@ class LLMService:
         content_str = response.choices[0].message.content
         data = json.loads(content_str)
         return E3MapResult.model_validate(data)
+
+    def validate_items_e5(
+        self,
+        items: list[dict],
+        chunks_from_e2: list[dict],
+    ) -> E5ValidationResult:
+        if not self.client:
+            raise ValueError("LLM Client not configured")
+
+        payload = {"items": items, "chunks_from_E2": chunks_from_e2}
+
+        prompt = f"""
+        Valida cada ítem respecto al chunk indicado:
+        1) ¿La respuesta correcta se deriva del chunk?
+        2) ¿Hay ambigüedad?
+        3) ¿Opciones consistentes?
+        4) ¿Lenguaje apropiado?
+        5) ¿Se han colado conceptos no presentes?
+
+        Acciones:
+        - ok: ítem válido
+        - fix: devuelve versión corregida
+        - drop: descartar con razón
+
+        Entrada JSON:
+        {json.dumps(payload, ensure_ascii=False)}
+
+        Devuelve SOLO JSON válido con este formato:
+        {{
+          "validated_items": [
+            {{
+              "index": 0,
+              "status": "ok|fix|drop",
+              "reason": "string",
+              "item": {{
+                "item_type": "mcq|true_false",
+                "stem": "string",
+                "options": ["string","string"],
+                "correct_answer": "string",
+                "explanation": "string",
+                "difficulty": 1.0,
+                "microconcept_ref": {{
+                  "microconcept_id": "uuid-or-null",
+                  "microconcept_code": "string-or-null",
+                  "microconcept_name": "string-or-null"
+                }},
+                "source_chunk_index": 0
+              }}
+            }}
+          ],
+          "quality": {{
+            "kept": 0,
+            "fixed": 0,
+            "dropped": 0,
+            "notes": ["string"]
+          }}
+        }}
+        """
+
+        response = self.client.chat.completions.create(
+            model=settings.LLM_MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres un validador de ítems educativos. "
+                        "Devuelve únicamente JSON válido conforme al esquema."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        content_str = response.choices[0].message.content
+        data = json.loads(content_str)
+        return E5ValidationResult.model_validate(data)

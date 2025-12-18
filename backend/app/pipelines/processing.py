@@ -181,44 +181,129 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
         run_e3 = LLMRun(step=LLMRunStep.E3_MAP, model="unknown", status="failed")
         db.add(run_e3)
 
-    # 5. E4: Items (for each chunk)
+    # 5. E4: Generate candidate items (per chunk)
     logger.info("Running E4: Items")
+    microconcept_by_id = {mc.id: mc for mc in microconcepts}
+    candidate_items: list[dict] = []
+
     for chunk in chunks:
         try:
-            e4_result = llm_service.generate_items_e4(
-                chunk.content, quantity=2
-            )  # 2 items per chunk
+            e4_result = llm_service.generate_items_e4(chunk.content, quantity=2)
 
-            # Log Run
             run_e4 = LLMRun(
                 step=LLMRunStep.E4_ITEMS,
-                model="gpt-4-turbo-preview",
+                model=settings.LLM_MODEL_NAME,
                 status="success",
                 subfolder=str(chunk.id),
             )
             db.add(run_e4)
 
-            # Save Items
-            for item_data in e4_result.items:
-                # Map string type to Enum
-                itype = (
-                    ItemType.MCQ if item_data["type"] == "multiple_choice" else ItemType.TRUE_FALSE
-                )
+            chunk_microconcept_id = chunk.microconcept_id or default_microconcept.id
+            microconcept = microconcept_by_id.get(chunk_microconcept_id)
 
-                item = Item(
-                    content_upload_id=upload.id,
-                    microconcept_id=chunk.microconcept_id or default_microconcept.id,
-                    type=itype,
-                    stem=item_data["stem"],
-                    options=item_data.get("options"),
-                    correct_answer=item_data["correct_answer"],
-                    explanation=item_data.get("explanation"),
+            microconcept_ref = {
+                "microconcept_id": str(chunk_microconcept_id) if chunk_microconcept_id else None,
+                "microconcept_code": microconcept.code if microconcept else None,
+                "microconcept_name": microconcept.name if microconcept else None,
+            }
+
+            for item_data in e4_result.items:
+                item_type = "mcq" if item_data["type"] == "multiple_choice" else "true_false"
+                candidate_items.append(
+                    {
+                        "item_type": item_type,
+                        "stem": item_data["stem"],
+                        "options": item_data.get("options"),
+                        "correct_answer": item_data["correct_answer"],
+                        "explanation": item_data.get("explanation"),
+                        "difficulty": 1.0,
+                        "microconcept_ref": microconcept_ref,
+                        "source_chunk_index": chunk.index,
+                    }
                 )
-                db.add(item)
 
         except Exception as e:
             logger.error(f"E4 failed for chunk {chunk.id}: {e}")
-            # Continue with other chunks
+            run_e4 = LLMRun(step=LLMRunStep.E4_ITEMS, model="unknown", status="failed")
+            db.add(run_e4)
+
+    # 6. E5: Validate/filter candidate items
+    logger.info("Running E5: Validate")
+
+    if not candidate_items:
+        db.commit()
+        logger.info("No candidate items generated")
+        return
+
+    try:
+        e5_result = llm_service.validate_items_e5(
+            items=candidate_items,
+            chunks_from_e2=chunks_from_e2,
+        )
+        run_e5 = LLMRun(
+            step=LLMRunStep.E5_VALIDATE,
+            model=settings.LLM_MODEL_NAME,
+            status="success",
+        )
+        db.add(run_e5)
+
+        for validated in e5_result.validated_items:
+            if validated.index < 0 or validated.index >= len(candidate_items):
+                continue
+
+            candidate = candidate_items[validated.index]
+
+            itype = ItemType.MCQ if validated.item.item_type == "mcq" else ItemType.TRUE_FALSE
+
+            difficulty = int(round(validated.item.difficulty or 1.0))
+            difficulty = max(1, min(3, difficulty))
+
+            microconcept_id = validated.item.microconcept_ref.microconcept_id
+            if not microconcept_id:
+                candidate_mc_id = candidate.get("microconcept_ref", {}).get("microconcept_id")
+                if candidate_mc_id:
+                    try:
+                        microconcept_id = uuid.UUID(candidate_mc_id)
+                    except ValueError:
+                        microconcept_id = None
+
+            item = Item(
+                content_upload_id=upload.id,
+                microconcept_id=microconcept_id or default_microconcept.id,
+                type=itype,
+                stem=validated.item.stem,
+                options=validated.item.options,
+                correct_answer=validated.item.correct_answer,
+                explanation=validated.item.explanation,
+                difficulty=difficulty,
+                source_chunk_index=validated.item.source_chunk_index,
+                validation_status=validated.status,
+                validation_reason=validated.reason,
+                is_active=validated.status != "drop",
+            )
+            db.add(item)
+
+    except Exception as e:
+        logger.error(f"E5 failed: {e}")
+        run_e5 = LLMRun(step=LLMRunStep.E5_VALIDATE, model="unknown", status="failed")
+        db.add(run_e5)
+        for candidate in candidate_items:
+            itype = ItemType.MCQ if candidate["item_type"] == "mcq" else ItemType.TRUE_FALSE
+            item = Item(
+                content_upload_id=upload.id,
+                microconcept_id=default_microconcept.id,
+                type=itype,
+                stem=candidate["stem"],
+                options=candidate.get("options"),
+                correct_answer=candidate["correct_answer"],
+                explanation=candidate.get("explanation"),
+                difficulty=1,
+                source_chunk_index=candidate.get("source_chunk_index"),
+                validation_status=None,
+                validation_reason="E5 failed",
+                is_active=True,
+            )
+            db.add(item)
 
     db.commit()
     logger.info("Processing complete")

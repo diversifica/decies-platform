@@ -178,5 +178,12 @@ def get_upload_items(
     else:
         raise HTTPException(status_code=403, detail="Role not allowed")
 
-    items = db.query(Item).filter(Item.content_upload_id == upload_id).all()
+    items = (
+        db.query(Item)
+        .filter(
+            Item.content_upload_id == upload_id,
+            Item.is_active.is_(True),
+        )
+        .all()
+    )
     return items
