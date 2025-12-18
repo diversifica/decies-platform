@@ -12,19 +12,21 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = '39dfe007d819'
-down_revision: str | None = '8fd02f1678c7'
+revision: str = "39dfe007d819"
+down_revision: str | None = "8fd02f1678c7"
 branch_labels: str | None = None
 depends_on: str | None = None
 
 
 def upgrade() -> None:
-    op.add_column('activity_sessions', sa.Column('feedback_rating', sa.Integer(), nullable=True))
-    op.add_column('activity_sessions', sa.Column('feedback_text', sa.Text(), nullable=True))
-    op.add_column('activity_sessions', sa.Column('feedback_submitted_at', sa.DateTime(), nullable=True))
+    op.add_column("activity_sessions", sa.Column("feedback_rating", sa.Integer(), nullable=True))
+    op.add_column("activity_sessions", sa.Column("feedback_text", sa.Text(), nullable=True))
+    op.add_column(
+        "activity_sessions", sa.Column("feedback_submitted_at", sa.DateTime(), nullable=True)
+    )
 
 
 def downgrade() -> None:
-    op.drop_column('activity_sessions', 'feedback_submitted_at')
-    op.drop_column('activity_sessions', 'feedback_text')
-    op.drop_column('activity_sessions', 'feedback_rating')
+    op.drop_column("activity_sessions", "feedback_submitted_at")
+    op.drop_column("activity_sessions", "feedback_text")
+    op.drop_column("activity_sessions", "feedback_rating")
