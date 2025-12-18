@@ -22,21 +22,30 @@ export default function StudentPage() {
     const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH'>('QUIZ');
     const [me, setMe] = useState<AuthMe | null>(null);
 
+    const studentId = me?.student_id || '';
+
     useEffect(() => {
-        const init = async () => {
+        const loadUploads = async () => {
+            if (!studentId) {
+                setUploads([]);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
             try {
                 const res: any = await api.get('/content/uploads');
                 setUploads(res.data);
             } catch (err: any) {
                 console.error(err);
+                setUploads([]);
             } finally {
                 setLoading(false);
             }
-        }
-        init();
-    }, []);
+        };
 
-    const studentId = me?.student_id || '';
+        loadUploads();
+    }, [studentId]);
 
     if (selectedUpload) {
         if (!studentId) {
