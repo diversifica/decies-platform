@@ -99,6 +99,7 @@ def create_session(
         db.query(Item)
         .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
         .filter(
+            Item.is_active.is_(True),
             ContentUpload.subject_id == session_data.subject_id,
             ContentUpload.term_id == session_data.term_id,
         )

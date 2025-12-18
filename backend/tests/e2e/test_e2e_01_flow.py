@@ -49,6 +49,49 @@ MOCK_E3_RESPONSE = {
     ],
     "quality": {"mapping_coverage": 0.0, "mapping_precision_hint": "low", "notes": ["n/a"]},
 }
+MOCK_E5_RESPONSE = {
+    "validated_items": [
+        {
+            "index": 0,
+            "status": "ok",
+            "reason": "ok",
+            "item": {
+                "item_type": "mcq",
+                "stem": "¿Cuál es el resultado de 1+1?",
+                "options": ["1", "2", "3", "4"],
+                "correct_answer": "2",
+                "explanation": "1+1=2.",
+                "difficulty": 1.0,
+                "microconcept_ref": {
+                    "microconcept_id": None,
+                    "microconcept_code": None,
+                    "microconcept_name": None,
+                },
+                "source_chunk_index": 0,
+            },
+        },
+        {
+            "index": 1,
+            "status": "ok",
+            "reason": "ok",
+            "item": {
+                "item_type": "mcq",
+                "stem": "¿Cuál es el resultado de 1+1?",
+                "options": ["1", "2", "3", "4"],
+                "correct_answer": "2",
+                "explanation": "1+1=2.",
+                "difficulty": 1.0,
+                "microconcept_ref": {
+                    "microconcept_id": None,
+                    "microconcept_code": None,
+                    "microconcept_name": None,
+                },
+                "source_chunk_index": 1,
+            },
+        },
+    ],
+    "quality": {"kept": 2, "fixed": 0, "dropped": 0, "notes": ["ok"]},
+}
 MOCK_E4_RESPONSE = {
     "items": [
         {
@@ -178,6 +221,7 @@ def test_e2e_01_flow_content_to_report(db_session: Session):
             _create_mock_response(MOCK_E3_RESPONSE),
             _create_mock_response(MOCK_E4_RESPONSE),
             _create_mock_response(MOCK_E4_RESPONSE),
+            _create_mock_response(MOCK_E5_RESPONSE),
         ]
 
         process_res = client.post(
