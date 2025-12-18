@@ -6,11 +6,15 @@ from fastapi.testclient import TestClient
 
 from app.core.db import SessionLocal
 from app.main import app
-from app.models.activity import ActivityType
-from app.models.item import Item
+from app.models.activity import ActivitySessionItem, ActivityType
+from app.models.content import ContentUpload, ContentUploadType
+from app.models.item import Item, ItemType
+from app.models.metric import MasteryState
+from app.models.microconcept import MicroConcept
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
+from app.models.tutor import Tutor
 
 client = TestClient(app)
 
@@ -194,3 +198,140 @@ def test_list_activity_types(db_session):
     data = response.json()
     assert len(data) >= 3  # QUIZ, MATCH, REVIEW from seed
     assert any(t["code"] == "QUIZ" for t in data)
+
+
+def test_create_activity_session_adaptive_selection_prioritizes_at_risk(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    tutor = db_session.query(Tutor).first()
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+    assert tutor is not None
+
+    microconcepts = (
+        db_session.query(MicroConcept)
+        .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+        .order_by(MicroConcept.code.asc())
+        .limit(3)
+        .all()
+    )
+    assert len(microconcepts) == 3
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="adaptive_selection_test.pdf",
+        storage_uri="/test/adaptive_selection_test.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    for idx, mc in enumerate(microconcepts):
+        for j in range(3):
+            item = Item(
+                id=uuid.uuid4(),
+                content_upload_id=upload.id,
+                microconcept_id=mc.id,
+                type=ItemType.MCQ,
+                stem=f"Pregunta adaptativa {idx}-{j}",
+                options=["A", "B", "C", "D"],
+                correct_answer="A",
+                explanation="",
+                difficulty=1,
+                is_active=True,
+            )
+            db_session.add(item)
+
+    # Mastery setup:
+    # - First microconcept at_risk
+    # - Second in_progress
+    # - Third dominant (should be de-prioritized)
+    now = datetime.utcnow()
+    statuses = ["at_risk", "in_progress", "dominant"]
+    scores = [0.2, 0.6, 0.9]
+    for mc, status, score in zip(microconcepts, statuses, scores, strict=True):
+        existing = (
+            db_session.query(MasteryState)
+            .filter(MasteryState.student_id == student.id, MasteryState.microconcept_id == mc.id)
+            .first()
+        )
+        if existing:
+            existing.status = status
+            existing.mastery_score = score
+            existing.updated_at = now
+            existing.last_practice_at = now
+        else:
+            db_session.add(
+                MasteryState(
+                    id=uuid.uuid4(),
+                    student_id=student.id,
+                    microconcept_id=mc.id,
+                    mastery_score=score,
+                    status=status,
+                    last_practice_at=now,
+                    updated_at=now,
+                    metrics_version="V1",
+                )
+            )
+
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 6,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    session_id = uuid.UUID(response.json()["id"])
+
+    selected = (
+        db_session.query(Item)
+        .join(ActivitySessionItem, ActivitySessionItem.item_id == Item.id)
+        .filter(ActivitySessionItem.session_id == session_id)
+        .order_by(ActivitySessionItem.order_index.asc())
+        .all()
+    )
+    assert len(selected) == 6
+    selected_microconcepts = [i.microconcept_id for i in selected]
+
+    assert microconcepts[0].id in selected_microconcepts[:3]
+    assert microconcepts[1].id in selected_microconcepts[:3]
+
+    counts: dict[uuid.UUID, int] = {}
+    for mcid in selected_microconcepts:
+        assert mcid is not None
+        counts[mcid] = counts.get(mcid, 0) + 1
+
+    assert max(counts.values()) <= 2

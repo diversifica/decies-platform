@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.models.activity import (
     LearningEvent,
 )
 from app.models.item import Item, ItemType
+from app.models.metric import MasteryState
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.tutor import Tutor
@@ -29,6 +31,138 @@ from app.schemas.item import ItemResponse
 from app.services.metric_service import metric_service
 
 router = APIRouter(prefix="/activities", tags=["activities"])
+
+MAX_ITEMS_PER_MICROCONCEPT = 2
+AT_RISK_PER_CYCLE = 2
+IN_PROGRESS_PER_CYCLE = 1
+
+
+def _to_float(value: float | Decimal | None) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def _fetch_mastery_map(
+    db: Session, *, student_id: uuid.UUID, microconcept_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, MasteryState]:
+    if not microconcept_ids:
+        return {}
+    rows = (
+        db.query(MasteryState)
+        .filter(
+            MasteryState.student_id == student_id,
+            MasteryState.microconcept_id.in_(microconcept_ids),
+        )
+        .all()
+    )
+    return {ms.microconcept_id: ms for ms in rows}
+
+
+def _adaptive_order_items_v1(
+    items: list[Item], mastery_by_microconcept: dict[uuid.UUID, MasteryState]
+) -> list[Item]:
+    at_risk: list[tuple[float, uuid.UUID, Item]] = []
+    in_progress: list[tuple[float, uuid.UUID, Item]] = []
+    dominant: list[tuple[float, uuid.UUID, Item]] = []
+    unknown: list[tuple[uuid.UUID, Item]] = []
+    no_microconcept: list[Item] = []
+
+    for item in items:
+        if not item.microconcept_id:
+            no_microconcept.append(item)
+            continue
+
+        ms = mastery_by_microconcept.get(item.microconcept_id)
+        if not ms:
+            unknown.append((item.id, item))
+            continue
+
+        score = _to_float(ms.mastery_score)
+        key = (score, item.id, item)
+        if ms.status == "at_risk":
+            at_risk.append(key)
+        elif ms.status == "in_progress":
+            in_progress.append(key)
+        elif ms.status == "dominant":
+            dominant.append(key)
+        else:
+            unknown.append((item.id, item))
+
+    at_risk.sort(key=lambda x: (x[0], x[1]))
+    in_progress.sort(key=lambda x: (x[0], x[1]))
+    dominant.sort(key=lambda x: (x[0], x[1]))
+    unknown.sort(key=lambda x: x[0])
+    no_microconcept.sort(key=lambda x: x.id)
+
+    at_risk_items = [i for (_score, _id, i) in at_risk]
+    in_progress_items = [i for (_score, _id, i) in in_progress]
+
+    # Interleave at_risk and in_progress to avoid bias towards a single bucket.
+    interleaved: list[Item] = []
+    a_idx = 0
+    p_idx = 0
+    while a_idx < len(at_risk_items) or p_idx < len(in_progress_items):
+        for _ in range(AT_RISK_PER_CYCLE):
+            if a_idx >= len(at_risk_items):
+                break
+            interleaved.append(at_risk_items[a_idx])
+            a_idx += 1
+        for _ in range(IN_PROGRESS_PER_CYCLE):
+            if p_idx >= len(in_progress_items):
+                break
+            interleaved.append(in_progress_items[p_idx])
+            p_idx += 1
+
+        # If one bucket is exhausted, keep draining the other.
+        if a_idx >= len(at_risk_items):
+            interleaved.extend(in_progress_items[p_idx:])
+            break
+        if p_idx >= len(in_progress_items):
+            interleaved.extend(at_risk_items[a_idx:])
+            break
+
+    ordered = interleaved
+    ordered.extend([i for (_score, _id, i) in dominant])
+    ordered.extend([i for (_id, i) in unknown])
+    ordered.extend(no_microconcept)
+    return ordered
+
+
+def _apply_microconcept_cap(
+    ordered_items: list[Item], *, item_count: int, max_per_microconcept: int
+) -> list[Item]:
+    selected: list[Item] = []
+    skipped_due_to_cap: list[Item] = []
+    counts: dict[uuid.UUID, int] = {}
+
+    for item in ordered_items:
+        if len(selected) >= item_count:
+            break
+
+        mcid = item.microconcept_id
+        if mcid and counts.get(mcid, 0) >= max_per_microconcept:
+            skipped_due_to_cap.append(item)
+            continue
+
+        selected.append(item)
+        if mcid:
+            counts[mcid] = counts.get(mcid, 0) + 1
+
+    if len(selected) >= item_count:
+        return selected
+
+    # Soft fallback: fill remaining ignoring the cap if we can't reach item_count.
+    for item in skipped_due_to_cap:
+        if len(selected) >= item_count:
+            break
+        if item in selected:
+            continue
+        selected.append(item)
+
+    return selected
 
 
 @router.get("/activity-types", response_model=list[ActivityTypeResponse])
@@ -85,6 +219,40 @@ def create_session(
         # Default: QUIZ-like items
         allowed_item_types = [ItemType.MCQ, ItemType.TRUE_FALSE]
 
+    # Select items for this session (adaptive V1)
+    from app.models.content import ContentUpload
+
+    base_query = (
+        db.query(Item)
+        .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
+        .filter(
+            Item.is_active.is_(True),
+            Item.type.in_(allowed_item_types),
+            ContentUpload.subject_id == session_data.subject_id,
+            ContentUpload.term_id == session_data.term_id,
+        )
+        .order_by(Item.id)
+    )
+    if session_data.content_upload_id:
+        base_query = base_query.filter(ContentUpload.id == session_data.content_upload_id)
+
+    candidate_items = base_query.all()
+    if not candidate_items:
+        raise HTTPException(status_code=404, detail="No items found for this subject/term")
+
+    microconcept_ids = {i.microconcept_id for i in candidate_items if i.microconcept_id}
+    mastery_by_microconcept = _fetch_mastery_map(
+        db, student_id=session_data.student_id, microconcept_ids=microconcept_ids
+    )
+
+    ordered_items = _adaptive_order_items_v1(candidate_items, mastery_by_microconcept)
+    selected_items = _apply_microconcept_cap(
+        ordered_items,
+        item_count=session_data.item_count,
+        max_per_microconcept=MAX_ITEMS_PER_MICROCONCEPT,
+    )
+    selected_items = selected_items[: session_data.item_count]
+
     # Create session
     session = ActivitySession(
         id=uuid.uuid4(),
@@ -100,44 +268,8 @@ def create_session(
     db.add(session)
     db.flush()
 
-    # Select random items for this session
-    # Items are linked to content_uploads, which are linked to subjects
-    from app.models.content import ContentUpload
-
-    items = (
-        db.query(Item)
-        .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
-        .filter(
-            Item.is_active.is_(True),
-            Item.type.in_(allowed_item_types),
-            ContentUpload.subject_id == session_data.subject_id,
-            ContentUpload.term_id == session_data.term_id,
-        )
-        .order_by(Item.id)  # Simple ordering, could be randomized
-        .limit(session_data.item_count)
-        .all()
-    )
-    if session_data.content_upload_id:
-        items = (
-            db.query(Item)
-            .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
-            .filter(
-                Item.is_active.is_(True),
-                Item.type.in_(allowed_item_types),
-                ContentUpload.subject_id == session_data.subject_id,
-                ContentUpload.term_id == session_data.term_id,
-                ContentUpload.id == session_data.content_upload_id,
-            )
-            .order_by(Item.id)
-            .limit(session_data.item_count)
-            .all()
-        )
-
-    if not items:
-        raise HTTPException(status_code=404, detail="No items found for this subject/term")
-
     # Create session items
-    for idx, item in enumerate(items):
+    for idx, item in enumerate(selected_items):
         session_item = ActivitySessionItem(
             id=uuid.uuid4(),
             session_id=session.id,
