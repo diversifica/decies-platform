@@ -33,6 +33,7 @@ class ActivitySessionBase(BaseModel):
 
 class ActivitySessionCreate(ActivitySessionBase):
     item_count: int = 10  # Number of items to include in session
+    content_upload_id: uuid.UUID | None = None
 
 
 class ActivitySessionResponse(ActivitySessionBase):

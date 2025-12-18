@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 import uuid
@@ -270,7 +271,7 @@ def seed_db():
                     microconcept_id=first_mc.id if first_mc else None,
                     type=ItemType.MCQ,
                     stem=f"Pregunta de prueba {i + 1}",
-                    options={"choices": ["Opción A", "Opción B", "Opción C", "Opción D"]},
+                    options=["Opción A", "Opción B", "Opción C", "Opción D"],
                     correct_answer="Opción A",
                     explanation=f"Explicación de la pregunta {i + 1}",
                     difficulty=1,
@@ -278,7 +279,67 @@ def seed_db():
                 db.add(item)
                 logger.info(f"Created test Item {i + 1}")
 
+            match_mcs = (
+                db.query(MicroConcept)
+                .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+                .order_by(MicroConcept.code.asc())
+                .limit(4)
+                .all()
+            )
+            if len(match_mcs) == 4:
+                pairs = [{"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs]
+                correct_map = {p["left"]: p["right"] for p in pairs}
+                match_item = Item(
+                    id=uuid.uuid4(),
+                    content_upload_id=test_upload.id,
+                    microconcept_id=match_mcs[0].id,
+                    type=ItemType.MATCH,
+                    stem="Empareja cada microconcepto con su descripción",
+                    options={"pairs": pairs},
+                    correct_answer=json.dumps(correct_map, ensure_ascii=False),
+                    explanation="",
+                    difficulty=1,
+                )
+                db.add(match_item)
+                logger.info("Created test MATCH Item")
+
             db.commit()
+        else:
+            existing_match = (
+                db.query(Item)
+                .filter(
+                    Item.content_upload_id == test_upload.id,
+                    Item.type == ItemType.MATCH,
+                )
+                .first()
+            )
+            if not existing_match:
+                match_mcs = (
+                    db.query(MicroConcept)
+                    .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+                    .order_by(MicroConcept.code.asc())
+                    .limit(4)
+                    .all()
+                )
+                if len(match_mcs) == 4:
+                    pairs = [
+                        {"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs
+                    ]
+                    correct_map = {p["left"]: p["right"] for p in pairs}
+                    match_item = Item(
+                        id=uuid.uuid4(),
+                        content_upload_id=test_upload.id,
+                        microconcept_id=match_mcs[0].id,
+                        type=ItemType.MATCH,
+                        stem="Empareja cada microconcepto con su descripción",
+                        options={"pairs": pairs},
+                        correct_answer=json.dumps(correct_map, ensure_ascii=False),
+                        explanation="",
+                        difficulty=1,
+                    )
+                    db.add(match_item)
+                    db.commit()
+                    logger.info("Created missing test MATCH Item")
 
         logger.info("Seeding complete!")
         logger.info(f"Tutor User ID: {user_tutor.id}")

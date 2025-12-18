@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
 
 export const ACCESS_TOKEN_STORAGE_KEY = 'decies.access_token';
 
@@ -13,8 +13,9 @@ api.interceptors.request.use((config) => {
     if (typeof window !== 'undefined') {
         const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
         if (token) {
-            config.headers = config.headers ?? {};
-            config.headers.Authorization = `Bearer ${token}`;
+            const headers = AxiosHeaders.from(config.headers ?? {});
+            headers.set('Authorization', `Bearer ${token}`);
+            config.headers = headers;
         }
     }
     return config;
