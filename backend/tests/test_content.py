@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.security import get_password_hash
 from app.main import app
 from app.models.content import ContentUpload
 from app.models.role import Role
@@ -40,18 +41,19 @@ def db_session():
 def test_upload_content_success(db_session: Session):
     # 1. Setup Data
     # Create Role
-    role = db_session.query(Role).filter_by(name="Tutor").first()
+    role = db_session.query(Role).filter_by(name="tutor").first()
     if not role:
-        role = Role(name="Tutor")
+        role = Role(name="tutor")
         db_session.add(role)
         db_session.commit()
 
     # Create User/Tutor
     user_id = uuid.uuid4()
+    password = "pw"
     user = User(
         id=user_id,
         email=f"tutor_{user_id}@test.com",
-        hashed_password="pw",
+        hashed_password=get_password_hash(password),
         is_active=True,
         role_id=role.id,
     )
@@ -60,6 +62,7 @@ def test_upload_content_success(db_session: Session):
 
     tutor = Tutor(user_id=user.id, display_name="Test Tutor")
     db_session.add(tutor)
+    db_session.flush()
 
     # Create Academic Year & Term
     ac_year = AcademicYear(
@@ -77,6 +80,14 @@ def test_upload_content_success(db_session: Session):
 
     db_session.commit()
 
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": user.email, "password": password},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     # 2. Perform Request
     # We mock the file upload
     file_content = b"fake pdf content"
@@ -87,9 +98,7 @@ def test_upload_content_success(db_session: Session):
         "upload_type": "pdf",
         "tutor_id": str(tutor.id),
     }
-    # Auth is mocked in router to pick first tutor.
-    # So it should pick our tutor (or another if exists).
-    response = client.post("/api/v1/content/uploads", files=files, data=data)
+    response = client.post("/api/v1/content/uploads", files=files, data=data, headers=headers)
 
     assert response.status_code == 201
     json_resp = response.json()
@@ -103,5 +112,13 @@ def test_upload_content_success(db_session: Session):
 
 
 def test_upload_content_missing_fields():
-    response = client.post("/api/v1/content/uploads", data={})
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "tutor@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post("/api/v1/content/uploads", data={}, headers=headers)
     assert response.status_code == 422

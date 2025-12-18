@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.deps import get_current_active_user, get_current_role_name, get_current_student
 from app.models.activity import (
     ActivitySession,
     ActivitySessionItem,
@@ -12,6 +13,10 @@ from app.models.activity import (
     LearningEvent,
 )
 from app.models.item import Item
+from app.models.student import Student
+from app.models.subject import Subject
+from app.models.tutor import Tutor
+from app.models.user import User
 from app.schemas.activity import (
     ActivitySessionCreate,
     ActivitySessionResponse,
@@ -34,10 +39,38 @@ def list_activity_types(db: Session = Depends(get_db)):
 
 
 @router.post("/sessions", response_model=ActivitySessionResponse)
-def create_session(session_data: ActivitySessionCreate, db: Session = Depends(get_db)):
+def create_session(
+    session_data: ActivitySessionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Create a new activity session with randomly selected items.
     """
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if session_data.student_id != student.id:
+            raise HTTPException(status_code=403, detail="Student mismatch")
+        if student.subject_id and session_data.subject_id != student.subject_id:
+            raise HTTPException(status_code=403, detail="Subject mismatch")
+    elif role_name == "tutor":
+        tutor = db.query(Tutor).filter(Tutor.user_id == current_user.id).first()
+        if not tutor:
+            raise HTTPException(status_code=404, detail="Tutor not found")
+        subject = db.get(Subject, session_data.subject_id)
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        if subject.tutor_id and subject.tutor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Subject not owned by tutor")
+        student = db.get(Student, session_data.student_id)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        if student.subject_id and student.subject_id != subject.id:
+            raise HTTPException(status_code=403, detail="Student not in subject")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
     # Get activity type
     activity_type = db.query(ActivityType).filter_by(id=session_data.activity_type_id).first()
     if not activity_type:
@@ -95,7 +128,11 @@ def create_session(session_data: ActivitySessionCreate, db: Session = Depends(ge
 
 
 @router.get("/sessions/{session_id}", response_model=ActivitySessionResponse)
-def get_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_session(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Get an activity session by ID.
     """
@@ -103,12 +140,27 @@ def get_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if session.student_id != student.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif role_name == "tutor":
+        subject = db.get(Subject, session.subject_id)
+        if subject and subject.tutor_id and subject.tutor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
     return session
 
 
 @router.post("/sessions/{session_id}/responses", response_model=LearningEventResponse)
 def record_response(
-    session_id: uuid.UUID, event_data: LearningEventCreate, db: Session = Depends(get_db)
+    session_id: uuid.UUID,
+    event_data: LearningEventCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Record a student response as a learning event.
@@ -117,6 +169,13 @@ def record_response(
     session = db.query(ActivitySession).filter_by(id=session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    role_name = get_current_role_name(db, current_user)
+    if role_name != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit responses")
+    student = get_current_student(db=db, current_user=current_user)
+    if event_data.student_id != student.id or session.student_id != student.id:
+        raise HTTPException(status_code=403, detail="Student mismatch")
 
     if session.status != "in_progress":
         raise HTTPException(status_code=400, detail="Session is not in progress")
@@ -155,13 +214,24 @@ def record_response(
 
 
 @router.post("/sessions/{session_id}/end", response_model=ActivitySessionResponse)
-def end_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
+def end_session(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """
     End an activity session and trigger metrics recalculation.
     """
     session = db.query(ActivitySession).filter_by(id=session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    role_name = get_current_role_name(db, current_user)
+    if role_name != "student":
+        raise HTTPException(status_code=403, detail="Only students can end sessions")
+    student = get_current_student(db=db, current_user=current_user)
+    if session.student_id != student.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
 
     if session.status != "in_progress":
         raise HTTPException(status_code=400, detail="Session already ended")
