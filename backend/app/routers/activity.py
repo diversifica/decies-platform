@@ -22,6 +22,7 @@ from app.models.tutor import Tutor
 from app.models.user import User
 from app.schemas.activity import (
     ActivitySessionCreate,
+    ActivitySessionFeedbackCreate,
     ActivitySessionResponse,
     ActivityTypeResponse,
     LearningEventCreate,
@@ -487,3 +488,32 @@ def end_session(
         print(f"Error recalculating metrics: {e}")
 
     return session
+
+
+@router.post("/sessions/{session_id}/feedback")
+def submit_session_feedback(
+    session_id: uuid.UUID,
+    feedback: ActivitySessionFeedbackCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    role_name = get_current_role_name(db, current_user)
+    if role_name != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit feedback")
+
+    student = get_current_student(db=db, current_user=current_user)
+    session = db.query(ActivitySession).filter_by(id=session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.student_id != student.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    if session.status != "completed":
+        raise HTTPException(status_code=400, detail="Session must be completed before feedback")
+
+    session.feedback_rating = feedback.rating
+    session.feedback_text = feedback.text
+    session.feedback_submitted_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(session)
+    return {"message": "Feedback saved", "session_id": session_id}

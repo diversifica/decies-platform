@@ -50,6 +50,11 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
     const [assignments, setAssignments] = useState<Record<string, string>>({});
     const [feedback, setFeedback] = useState<{ isCorrect: boolean; text: string } | null>(null);
     const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
+    const [sessionFeedbackRating, setSessionFeedbackRating] = useState<number>(5);
+    const [sessionFeedbackText, setSessionFeedbackText] = useState<string>('');
+    const [sessionFeedbackSubmitting, setSessionFeedbackSubmitting] = useState(false);
+    const [sessionFeedbackSubmitted, setSessionFeedbackSubmitted] = useState(false);
+    const [sessionFeedbackError, setSessionFeedbackError] = useState<string>('');
 
     useEffect(() => {
         let cancelled = false;
@@ -190,15 +195,74 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
         setFinished(true);
     };
 
+    const submitSessionFeedback = async () => {
+        if (!sessionId || sessionFeedbackSubmitted) return;
+        setSessionFeedbackSubmitting(true);
+        setSessionFeedbackError('');
+        try {
+            await api.post(`/activities/sessions/${sessionId}/feedback`, {
+                rating: sessionFeedbackRating,
+                text: sessionFeedbackText || null,
+            });
+            setSessionFeedbackSubmitted(true);
+        } catch (err: any) {
+            setSessionFeedbackError(err?.response?.data?.detail || err?.message || 'Error enviando feedback');
+        } finally {
+            setSessionFeedbackSubmitting(false);
+        }
+    };
+
     if (finished) {
         return (
-            <div className="card" style={{ textAlign: "center" }}>
-                <h3>Actividad Completada</h3>
-                <p style={{ color: "var(--text-secondary)" }}>Tus métricas se han actualizado automáticamente.</p>
-                <button onClick={onExit} className="btn">
-                    Volver al inicio
-                </button>
-            </div>
+                <div className="card" style={{ textAlign: "center" }}>
+                    <h3>Actividad Completada</h3>
+                    <p style={{ color: "var(--text-secondary)" }}>Tus métricas se han actualizado automáticamente.</p>
+
+                    <div style={{ marginTop: "1.5rem", textAlign: "left" }}>
+                        <h4 style={{ marginTop: 0 }}>Feedback (opcional)</h4>
+                        <label style={{ display: "block", marginBottom: "0.75rem" }}>
+                            Valoración
+                            <select
+                                className="input"
+                                value={sessionFeedbackRating}
+                                onChange={(e) => setSessionFeedbackRating(Number(e.target.value))}
+                                disabled={sessionFeedbackSubmitting || sessionFeedbackSubmitted}
+                            >
+                                {[1, 2, 3, 4, 5].map((v) => (
+                                    <option key={v} value={v}>{v}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label style={{ display: "block" }}>
+                            Comentario
+                            <textarea
+                                className="input"
+                                rows={3}
+                                value={sessionFeedbackText}
+                                onChange={(e) => setSessionFeedbackText(e.target.value)}
+                                disabled={sessionFeedbackSubmitting || sessionFeedbackSubmitted}
+                                placeholder="¿Qué te ha parecido la sesión?"
+                            />
+                        </label>
+                        {sessionFeedbackError && (
+                            <p style={{ color: "var(--error)", marginTop: "0.75rem" }}>{sessionFeedbackError}</p>
+                        )}
+                        {sessionFeedbackSubmitted && (
+                            <p style={{ color: "var(--success)", marginTop: "0.75rem" }}>Feedback enviado.</p>
+                        )}
+                        <button
+                            onClick={submitSessionFeedback}
+                            className="btn btn-secondary"
+                            disabled={sessionFeedbackSubmitting || sessionFeedbackSubmitted}
+                            style={{ marginTop: "0.75rem" }}
+                        >
+                            {sessionFeedbackSubmitting ? "Enviando..." : "Enviar feedback"}
+                        </button>
+                    </div>
+                    <button onClick={onExit} className="btn">
+                        Volver al inicio
+                    </button>
+                </div>
         );
     }
 

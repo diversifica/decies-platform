@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ActivityTypeBase(BaseModel):
@@ -34,6 +34,11 @@ class ActivitySessionBase(BaseModel):
 class ActivitySessionCreate(ActivitySessionBase):
     item_count: int = 10  # Number of items to include in session
     content_upload_id: uuid.UUID | None = None
+
+
+class ActivitySessionFeedbackCreate(BaseModel):
+    rating: int | None = Field(default=None, ge=1, le=5)
+    text: str | None = Field(default=None, max_length=2000)
 
 
 class ActivitySessionResponse(ActivitySessionBase):

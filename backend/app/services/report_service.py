@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.models.activity import ActivitySession, ActivityType
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
@@ -32,6 +33,18 @@ def _priority_to_str(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _format_feedback_entry(entry: dict[str, Any]) -> str:
+    submitted_at = entry.get("submitted_at") or ""
+    activity_code = entry.get("activity_type") or ""
+    rating = entry.get("rating")
+    text = (entry.get("text") or "").strip()
+
+    rating_label = f"{rating}/5" if isinstance(rating, int) else "N/A"
+    if text:
+        return f"- [{activity_code}] {submitted_at} — {rating_label} — {text}"
+    return f"- [{activity_code}] {submitted_at} — {rating_label}"
 
 
 class ReportService:
@@ -104,6 +117,35 @@ class ReportService:
             .all()
         )
 
+        feedback_sessions = (
+            db.query(ActivitySession, ActivityType)
+            .join(ActivityType, ActivitySession.activity_type_id == ActivityType.id)
+            .filter(
+                ActivitySession.student_id == student_id,
+                ActivitySession.subject_id == subject_id,
+                ActivitySession.term_id == term_id,
+                ActivitySession.feedback_submitted_at.is_not(None),
+            )
+            .order_by(ActivitySession.feedback_submitted_at.desc())
+            .limit(5)
+            .all()
+        )
+        feedback_entries: list[dict[str, Any]] = []
+        for session, activity_type in feedback_sessions:
+            feedback_entries.append(
+                {
+                    "session_id": str(session.id),
+                    "activity_type": activity_type.code,
+                    "rating": session.feedback_rating,
+                    "text": session.feedback_text,
+                    "submitted_at": (
+                        session.feedback_submitted_at.isoformat()
+                        if session.feedback_submitted_at
+                        else None
+                    ),
+                }
+            )
+
         at_risk = []
         for ms, mc in mastery_states:
             if ms.status != "at_risk":
@@ -144,6 +186,8 @@ class ReportService:
         if at_risk_count:
             top_at_risk = ", ".join([mc["name"] for mc in at_risk[:5]])
             executive_lines.append(f"- En riesgo (top): {top_at_risk}")
+        if feedback_entries:
+            executive_lines.append(f"- Feedback reciente: {len(feedback_entries)} comentario(s)")
 
         metrics_snapshot: dict[str, Any] = {
             "accuracy": accuracy,
@@ -159,6 +203,7 @@ class ReportService:
                 "at_risk": at_risk_count,
             },
             "pending_recommendations": len(pending_recommendations),
+            "feedback_count": len(feedback_entries),
         }
 
         report = TutorReport(
@@ -224,6 +269,19 @@ class ReportService:
                         for rec in pending_recommendations
                     ]
                 },
+            ),
+            TutorReportSection(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                order_index=3,
+                section_type="student_feedback",
+                title="Feedback del alumno",
+                content=(
+                    "\n".join([_format_feedback_entry(e) for e in feedback_entries])
+                    if feedback_entries
+                    else "No hay feedback registrado aún."
+                ),
+                data={"entries": feedback_entries},
             ),
         ]
         for section in sections:
