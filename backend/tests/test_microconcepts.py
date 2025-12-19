@@ -162,3 +162,72 @@ def test_microconcepts_tutor_cannot_access_other_tutor_subject(db_session: Sessi
         headers=headers_a,
     )
     assert res.status_code == 403
+
+
+def test_microconcept_prerequisites_crud_and_cycle_prevention(db_session: Session):
+    _user, _tutor, subject, term, headers = _create_tutor_scope(db_session)
+
+    def create_mc(code: str, name: str) -> str:
+        res = client.post(
+            "/api/v1/microconcepts",
+            json={
+                "subject_id": str(subject.id),
+                "term_id": str(term.id),
+                "topic_id": None,
+                "code": code,
+                "name": name,
+                "description": None,
+                "active": True,
+            },
+            headers=headers,
+        )
+        assert res.status_code == 200
+        return res.json()["id"]
+
+    mc_a = create_mc("MC-A", "A")
+    mc_b = create_mc("MC-B", "B")
+    mc_c = create_mc("MC-C", "C")
+
+    add_ab = client.post(
+        f"/api/v1/microconcepts/{mc_a}/prerequisites",
+        json={"prerequisite_microconcept_id": mc_b},
+        headers=headers,
+    )
+    assert add_ab.status_code == 200
+    assert add_ab.json()["microconcept_id"] == mc_a
+    assert add_ab.json()["prerequisite_microconcept_id"] == mc_b
+
+    # duplicate should be idempotent
+    add_ab2 = client.post(
+        f"/api/v1/microconcepts/{mc_a}/prerequisites",
+        json={"prerequisite_microconcept_id": mc_b},
+        headers=headers,
+    )
+    assert add_ab2.status_code == 200
+    assert add_ab2.json()["id"] == add_ab.json()["id"]
+
+    add_bc = client.post(
+        f"/api/v1/microconcepts/{mc_b}/prerequisites",
+        json={"prerequisite_microconcept_id": mc_c},
+        headers=headers,
+    )
+    assert add_bc.status_code == 200
+
+    # would create cycle C -> A -> B -> C
+    add_ca = client.post(
+        f"/api/v1/microconcepts/{mc_c}/prerequisites",
+        json={"prerequisite_microconcept_id": mc_a},
+        headers=headers,
+    )
+    assert add_ca.status_code == 400
+
+    list_a = client.get(f"/api/v1/microconcepts/{mc_a}/prerequisites", headers=headers)
+    assert list_a.status_code == 200
+    assert any(r["prerequisite_microconcept_id"] == mc_b for r in list_a.json())
+
+    delete_ab = client.delete(f"/api/v1/microconcepts/{mc_a}/prerequisites/{mc_b}", headers=headers)
+    assert delete_ab.status_code == 200
+
+    list_a2 = client.get(f"/api/v1/microconcepts/{mc_a}/prerequisites", headers=headers)
+    assert list_a2.status_code == 200
+    assert all(r["prerequisite_microconcept_id"] != mc_b for r in list_a2.json())

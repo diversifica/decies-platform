@@ -45,6 +45,10 @@ class MicroConceptPrerequisiteCreate(MicroConceptPrerequisiteBase):
     pass
 
 
+class MicroConceptPrerequisiteLinkCreate(BaseModel):
+    prerequisite_microconcept_id: uuid.UUID
+
+
 class MicroConceptPrerequisiteResponse(MicroConceptPrerequisiteBase):
     id: uuid.UUID
     created_at: datetime | None

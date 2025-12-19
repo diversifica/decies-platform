@@ -54,3 +54,33 @@ export async function updateMicroconcept(
     return res.data;
 }
 
+export interface MicroConceptPrerequisite {
+    id: string;
+    microconcept_id: string;
+    prerequisite_microconcept_id: string;
+    created_at: string | null;
+}
+
+export async function fetchMicroconceptPrerequisites(
+    microconceptId: string
+): Promise<MicroConceptPrerequisite[]> {
+    const res = await api.get(`/microconcepts/${microconceptId}/prerequisites`);
+    return res.data;
+}
+
+export async function addMicroconceptPrerequisite(
+    microconceptId: string,
+    prerequisiteMicroconceptId: string
+): Promise<MicroConceptPrerequisite> {
+    const res = await api.post(`/microconcepts/${microconceptId}/prerequisites`, {
+        prerequisite_microconcept_id: prerequisiteMicroconceptId,
+    });
+    return res.data;
+}
+
+export async function removeMicroconceptPrerequisite(
+    microconceptId: string,
+    prerequisiteMicroconceptId: string
+): Promise<void> {
+    await api.delete(`/microconcepts/${microconceptId}/prerequisites/${prerequisiteMicroconceptId}`);
+}
