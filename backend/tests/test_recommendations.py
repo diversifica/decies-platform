@@ -5,7 +5,7 @@ import pytest
 
 from app.core.db import SessionLocal
 from app.models.metric import MasteryState, MetricAggregate
-from app.models.microconcept import MicroConcept
+from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
 from app.models.role import Role
 from app.models.student import Student
@@ -168,6 +168,128 @@ def test_generate_recommendations_at_risk_concept(db_session, context):
     assert r11 is not None
     assert r11.microconcept_id == mc.id
     assert r11.status == RecommendationStatus.PENDING
+
+
+def test_generate_recommendations_prerequisites_r05(db_session, context):
+    """
+    Test R05: at-risk practiced concept with prerequisites generates prerequisite recommendation(s)
+    """
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc_target = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Target", description="..."
+    )
+    mc_prereq_weak = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Prereq Weak", description="..."
+    )
+    mc_prereq_strong = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Prereq Strong", description="..."
+    )
+    db_session.add_all([mc_target, mc_prereq_weak, mc_prereq_strong])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            MicroConceptPrerequisite(
+                microconcept_id=mc_target.id, prerequisite_microconcept_id=mc_prereq_weak.id
+            ),
+            MicroConceptPrerequisite(
+                microconcept_id=mc_target.id, prerequisite_microconcept_id=mc_prereq_strong.id
+            ),
+        ]
+    )
+
+    now = datetime.now()
+    db_session.add_all(
+        [
+            MasteryState(
+                student_id=student.id,
+                microconcept_id=mc_target.id,
+                mastery_score=0.2,
+                status="at_risk",
+                last_practice_at=now,
+                updated_at=now,
+            ),
+            MasteryState(
+                student_id=student.id,
+                microconcept_id=mc_prereq_weak.id,
+                mastery_score=0.3,
+                status="at_risk",
+                last_practice_at=None,
+                updated_at=now,
+            ),
+            MasteryState(
+                student_id=student.id,
+                microconcept_id=mc_prereq_strong.id,
+                mastery_score=0.9,
+                status="dominant",
+                last_practice_at=now,
+                updated_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+
+    r05s = [r for r in recs if r.rule_id == "R05"]
+    assert len(r05s) == 1
+    assert r05s[0].microconcept_id == mc_prereq_weak.id
+    assert any(ev.key == "target_microconcept_id" for ev in r05s[0].evidence)
+
+
+def test_generate_recommendations_prerequisites_r05_requires_practice(db_session, context):
+    """R05 should not fire for default at-risk concepts with no practice yet."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc_target = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Target", description="..."
+    )
+    mc_prereq = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Prereq", description="..."
+    )
+    db_session.add_all([mc_target, mc_prereq])
+    db_session.flush()
+
+    db_session.add(
+        MicroConceptPrerequisite(
+            microconcept_id=mc_target.id, prerequisite_microconcept_id=mc_prereq.id
+        )
+    )
+
+    now = datetime.now()
+    db_session.add_all(
+        [
+            MasteryState(
+                student_id=student.id,
+                microconcept_id=mc_target.id,
+                mastery_score=0.0,
+                status="at_risk",
+                last_practice_at=None,
+                updated_at=now,
+            ),
+            MasteryState(
+                student_id=student.id,
+                microconcept_id=mc_prereq.id,
+                mastery_score=0.0,
+                status="at_risk",
+                last_practice_at=None,
+                updated_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    assert all(r.rule_id != "R05" for r in recs)
 
 
 def test_tutor_decision(db_session, context):
