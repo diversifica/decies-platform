@@ -118,6 +118,16 @@ def test_microconcepts_tutor_can_create_list_and_update(db_session: Session):
     assert patch_res.json()["name"] == "Números enteros (editado)"
     assert patch_res.json()["active"] is False
 
+    list_after_res = client.get(
+        f"/api/v1/microconcepts/subjects/{subject.id}",
+        params={"term_id": str(term.id)},
+        headers=headers,
+    )
+    assert list_after_res.status_code == 200
+    row = next((r for r in list_after_res.json() if r["id"] == mc_id), None)
+    assert row is not None
+    assert row["active"] is False
+
     mc = db_session.query(MicroConcept).filter_by(id=uuid.UUID(mc_id)).first()
     assert mc is not None
     assert mc.active is False
