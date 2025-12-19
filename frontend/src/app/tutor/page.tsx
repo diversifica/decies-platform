@@ -7,11 +7,12 @@ import UploadList from '../../components/tutor/UploadList';
 import MetricsDashboard from '../../components/tutor/MetricsDashboard';
 import RecommendationList from '../../components/tutor/RecommendationList';
 import TutorReportPanel from '../../components/tutor/TutorReportPanel';
+import MicroconceptManager from '../../components/tutor/MicroconceptManager';
 import { AuthMe } from '../../services/auth';
 import { fetchStudents, fetchSubjects, fetchTerms, StudentSummary, SubjectSummary, TermSummary } from '../../services/catalog';
 
 export default function TutorPage() {
-    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports'>('content');
+    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports' | 'microconcepts'>('content');
 
     const [me, setMe] = useState<AuthMe | null>(null);
     const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
@@ -168,6 +169,12 @@ export default function TutorPage() {
                         >
                             Informe
                         </button>
+                        <button
+                            onClick={() => setActiveTab('microconcepts')}
+                            style={getTabStyle('microconcepts')}
+                        >
+                            Microconceptos
+                        </button>
                     </div>
 
                     {/* Content */}
@@ -221,6 +228,17 @@ export default function TutorPage() {
                             />
                         ) : (
                             <p>Selecciona contexto para ver informes.</p>
+                        )
+                    )}
+
+                    {activeTab === 'microconcepts' && (
+                        selectedSubjectId && selectedTermId ? (
+                            <MicroconceptManager
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona asignatura y trimestre para gestionar microconceptos.</p>
                         )
                     )}
                 </>

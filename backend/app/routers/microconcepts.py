@@ -28,6 +28,7 @@ def _require_tutor_owns_subject(db: Session, current_user: User, subject_id: uui
 def list_microconcepts(
     subject_id: uuid.UUID,
     term_id: uuid.UUID | None = None,
+    active: bool | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -38,13 +39,13 @@ def list_microconcepts(
     """
     _require_tutor_owns_subject(db=db, current_user=current_user, subject_id=subject_id)
 
-    query = db.query(MicroConcept).filter(
-        MicroConcept.subject_id == subject_id,
-        MicroConcept.active == True,  # noqa: E712
-    )
+    query = db.query(MicroConcept).filter(MicroConcept.subject_id == subject_id)
 
     if term_id:
         query = query.filter(MicroConcept.term_id == term_id)
+
+    if active is not None:
+        query = query.filter(MicroConcept.active == active)
 
     microconcepts = query.order_by(MicroConcept.name).all()
 
