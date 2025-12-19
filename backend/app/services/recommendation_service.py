@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.metric import MasteryState, MetricAggregate
-from app.models.microconcept import MicroConcept
+from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import (
     RecommendationEvidence,
     RecommendationInstance,
@@ -58,6 +58,7 @@ class RecommendationService:
             )
             .all()
         )
+        mastery_by_microconcept_id = {ms.microconcept_id: ms for ms in mastery_states}
 
         # 2. Rule R01: General Low Accuracy (Scope: Subject)
         # Condition: accuracy < 0.5
@@ -128,7 +129,99 @@ class RecommendationService:
                 if rec:
                     generated_recs.append(rec)
 
-        # 4. Rule R21: High Response Time (Fatigue/Doubt) (Simplified)
+        # 4. Rule R05: Reinforce Prerequisites
+        # Condition: target microconcept is at_risk AND has been practiced at least once
+        # (last_practice_at set).
+        # Action: recommend practicing up to 2 weakest prerequisites (non-dominant).
+        for state in mastery_states:
+            if state.status != "at_risk" or not state.last_practice_at:
+                continue
+
+            prereq_rows = (
+                db.query(MicroConceptPrerequisite.prerequisite_microconcept_id)
+                .join(
+                    MicroConcept,
+                    MicroConcept.id == MicroConceptPrerequisite.prerequisite_microconcept_id,
+                )
+                .filter(
+                    MicroConceptPrerequisite.microconcept_id == state.microconcept_id,
+                    MicroConcept.active == True,  # noqa: E712
+                )
+                .all()
+            )
+            prereq_ids = [row[0] for row in prereq_rows]
+            if not prereq_ids:
+                continue
+
+            target_mc = db.get(MicroConcept, state.microconcept_id)
+            target_name = target_mc.name if target_mc else "Unknown Concept"
+
+            candidates: list[tuple[uuid.UUID, float]] = []
+            for prereq_id in prereq_ids:
+                prereq_state = mastery_by_microconcept_id.get(prereq_id)
+                if not prereq_state:
+                    continue
+                if prereq_state.mastery_score >= 0.8:
+                    continue
+                candidates.append((prereq_id, float(prereq_state.mastery_score)))
+
+            candidates.sort(key=lambda t: t[1])
+            for prereq_id, prereq_score in candidates[:2]:
+                prereq_mc = db.get(MicroConcept, prereq_id)
+                prereq_name = prereq_mc.name if prereq_mc else "Unknown Prerequisite"
+
+                prereq_state = mastery_by_microconcept_id.get(prereq_id)
+                prereq_status = prereq_state.status if prereq_state else "unknown"
+
+                priority = (
+                    RecommendationPriority.HIGH
+                    if float(state.mastery_score) < 0.3
+                    else RecommendationPriority.MEDIUM
+                )
+
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R05",
+                    title=f"Reforzar prerequisito: {prereq_name}",
+                    description=(
+                        f"El estudiante muestra dificultades en '{target_name}'. "
+                        f"Se recomienda reforzar el prerequisito '{prereq_name}' "
+                        "antes de continuar."
+                    ),
+                    priority=priority,
+                    microconcept_id=prereq_id,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="prerequisite",
+                            key="target_microconcept_id",
+                            value=str(state.microconcept_id),
+                            description=f"Target concept: {target_name}",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="prerequisite",
+                            key="target_mastery_score",
+                            value=str(state.mastery_score),
+                            description="Target mastery is at_risk",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="prerequisite",
+                            key="prerequisite_status",
+                            value=str(prereq_status),
+                            description="Prerequisite is not dominant",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="prerequisite",
+                            key="prerequisite_mastery_score",
+                            value=str(prereq_score),
+                            description="Prerequisite mastery below dominant threshold",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # 5. Rule R21: High Response Time (Fatigue/Doubt) (Simplified)
         # Condition: median_response_time > 30000ms (30s)
         # In a real system we'd compare vs class average or student history.
         if metrics and metrics.median_response_time_ms > 30000:
