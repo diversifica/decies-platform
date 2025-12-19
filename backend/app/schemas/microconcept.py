@@ -18,6 +18,15 @@ class MicroConceptCreate(MicroConceptBase):
     pass
 
 
+class MicroConceptUpdate(BaseModel):
+    term_id: uuid.UUID | None = None
+    topic_id: uuid.UUID | None = None
+    code: str | None = None
+    name: str | None = None
+    description: str | None = None
+    active: bool | None = None
+
+
 class MicroConceptResponse(MicroConceptBase):
     id: uuid.UUID
     created_at: datetime | None
