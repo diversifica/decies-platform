@@ -103,6 +103,8 @@ export default function MatchRunner({ uploadId, studentId, subjectId, termId, on
                 if (!cancelled) {
                     if (detail === 'Not enough permissions') {
                         setInitError('Necesitas iniciar sesión como estudiante.');
+                    } else if (detail === 'No items found for this subject/term') {
+                        setInitError('Este contenido aún no tiene ítems MATCH. Por ahora usa Quiz.');
                     } else if (typeof detail === 'string' && detail.length > 0) {
                         setInitError(detail);
                     } else {

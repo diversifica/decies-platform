@@ -21,6 +21,8 @@ export default function StudentPage() {
     const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
     const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH'>('QUIZ');
     const [me, setMe] = useState<AuthMe | null>(null);
+    const [actionError, setActionError] = useState<string>('');
+    const [actionLoading, setActionLoading] = useState(false);
 
     const studentId = me?.student_id || '';
 
@@ -36,6 +38,7 @@ export default function StudentPage() {
             try {
                 const res: any = await api.get('/content/uploads');
                 setUploads(res.data);
+                setActionError('');
             } catch (err: any) {
                 console.error(err);
                 setUploads([]);
@@ -46,6 +49,35 @@ export default function StudentPage() {
 
         loadUploads();
     }, [studentId]);
+
+    const openActivity = async (upload: Upload, mode: 'QUIZ' | 'MATCH') => {
+        if (!studentId) return;
+        setActionError('');
+        setActionLoading(true);
+        try {
+            const res = await api.get(`/content/uploads/${upload.id}/items`);
+            const items: any[] = Array.isArray(res.data) ? res.data : [];
+            const hasMatch = items.some((i) => i?.type === 'match');
+            const hasQuiz = items.some((i) => i?.type === 'multiple_choice' || i?.type === 'true_false');
+
+            if (mode === 'MATCH' && !hasMatch) {
+                setActionError('Este contenido aún no tiene ítems MATCH. Por ahora usa Quiz.');
+                return;
+            }
+            if (mode === 'QUIZ' && !hasQuiz) {
+                setActionError('Este contenido aún no tiene preguntas de Quiz. Pide al tutor que lo procese.');
+                return;
+            }
+
+            setSelectedMode(mode);
+            setSelectedUpload(upload);
+        } catch (err: any) {
+            console.error(err);
+            setActionError(err?.response?.data?.detail || err?.message || 'No se pudo abrir la actividad.');
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
     if (selectedUpload) {
         if (!studentId) {
@@ -82,6 +114,8 @@ export default function StudentPage() {
                 onLogout={() => setMe(null)}
             />
 
+            {actionError && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{actionError}</p>}
+
             {loading ? <p>Cargando actividades...</p> : (
                 <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem' }}>
                     {uploads.map(upload => (
@@ -92,18 +126,18 @@ export default function StudentPage() {
                             </p>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
-                                    disabled={!studentId}
-                                    onClick={() => { setSelectedMode('QUIZ'); setSelectedUpload(upload); }}
+                                    disabled={!studentId || actionLoading}
+                                    onClick={() => openActivity(upload, 'QUIZ')}
                                     className="btn"
                                 >
-                                    Quiz
+                                    {actionLoading ? 'Cargando...' : 'Quiz'}
                                 </button>
                                 <button
-                                    disabled={!studentId}
-                                    onClick={() => { setSelectedMode('MATCH'); setSelectedUpload(upload); }}
+                                    disabled={!studentId || actionLoading}
+                                    onClick={() => openActivity(upload, 'MATCH')}
                                     className="btn btn-secondary"
                                 >
-                                    Match
+                                    {actionLoading ? 'Cargando...' : 'Match'}
                                 </button>
                             </div>
                         </div>
