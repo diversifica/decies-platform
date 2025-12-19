@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
     createMicroconcept,
     fetchMicroconcepts,
+    fetchMicroconceptPrerequisites,
+    addMicroconceptPrerequisite,
+    removeMicroconceptPrerequisite,
     MicroConcept,
+    MicroConceptPrerequisite,
     updateMicroconcept,
 } from "../../services/microconcepts";
 
@@ -38,6 +42,14 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
     const [editName, setEditName] = useState("");
     const [editDescription, setEditDescription] = useState("");
     const [saving, setSaving] = useState(false);
+
+    const [prereqOpenId, setPrereqOpenId] = useState<string | null>(null);
+    const [prereqLoading, setPrereqLoading] = useState(false);
+    const [prereqByMicroconcept, setPrereqByMicroconcept] = useState<
+        Record<string, MicroConceptPrerequisite[]>
+    >({});
+    const [prereqSelection, setPrereqSelection] = useState<string[]>([]);
+    const [prereqSaving, setPrereqSaving] = useState(false);
 
     const refresh = async () => {
         if (!subjectId) return;
@@ -100,6 +112,54 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
     const cancelEdit = () => {
         setEditingId(null);
         setError("");
+    };
+
+    const openPrereqEditor = async (microconceptId: string) => {
+        if (prereqOpenId === microconceptId) {
+            setPrereqOpenId(null);
+            setPrereqSelection([]);
+            return;
+        }
+        setPrereqOpenId(microconceptId);
+        setPrereqLoading(true);
+        setError("");
+        try {
+            const edges = await fetchMicroconceptPrerequisites(microconceptId);
+            setPrereqByMicroconcept((prev) => ({ ...prev, [microconceptId]: edges }));
+            setPrereqSelection(edges.map((e) => e.prerequisite_microconcept_id));
+        } catch (err: any) {
+            setError(getErrorMessage(err));
+        } finally {
+            setPrereqLoading(false);
+        }
+    };
+
+    const savePrereqSelection = async () => {
+        if (!prereqOpenId) return;
+        setPrereqSaving(true);
+        setError("");
+        try {
+            const current = prereqByMicroconcept[prereqOpenId] || [];
+            const currentIds = new Set(current.map((e) => e.prerequisite_microconcept_id));
+            const desiredIds = new Set(prereqSelection);
+
+            const toAdd = [...desiredIds].filter((id) => !currentIds.has(id));
+            const toRemove = [...currentIds].filter((id) => !desiredIds.has(id));
+
+            if (toAdd.length > 0) {
+                await Promise.all(toAdd.map((id) => addMicroconceptPrerequisite(prereqOpenId, id)));
+            }
+            if (toRemove.length > 0) {
+                await Promise.all(toRemove.map((id) => removeMicroconceptPrerequisite(prereqOpenId, id)));
+            }
+
+            const edges = await fetchMicroconceptPrerequisites(prereqOpenId);
+            setPrereqByMicroconcept((prev) => ({ ...prev, [prereqOpenId]: edges }));
+        } catch (err: any) {
+            setError(getErrorMessage(err));
+        } finally {
+            setPrereqSaving(false);
+        }
     };
 
     const onSave = async () => {
@@ -189,6 +249,15 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
                     <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.75rem" }}>
                         {items.map((mc) => {
                             const isEditing = editingId === mc.id;
+                            const isPrereqOpen = prereqOpenId === mc.id;
+                            const prereqEdges = prereqByMicroconcept[mc.id] || [];
+                            const prereqNames = prereqEdges
+                                .map((e) => items.find((i) => i.id === e.prerequisite_microconcept_id)?.name)
+                                .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+                            const prereqOptions = items
+                                .filter((o) => o.id !== mc.id && o.term_id === mc.term_id)
+                                .sort((a, b) => a.name.localeCompare(b.name));
                             return (
                                 <div
                                     key={mc.id}
@@ -328,16 +397,83 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <button
-                                                    className="btn btn-secondary"
-                                                    onClick={() => startEdit(mc.id)}
-                                                    disabled={saving || creating}
-                                                >
-                                                    Editar
-                                                </button>
+                                                <div style={{ display: "flex", gap: "0.5rem" }}>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        onClick={() => startEdit(mc.id)}
+                                                        disabled={saving || creating}
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        onClick={() => openPrereqEditor(mc.id)}
+                                                        disabled={saving || creating}
+                                                    >
+                                                        Prerequisitos
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
+
+                                    {!isEditing && (
+                                        <div style={{ marginTop: "0.75rem", color: "var(--text-secondary)" }}>
+                                            <strong>Prerequisitos:</strong>{" "}
+                                            {prereqNames.length > 0 ? prereqNames.join(", ") : "—"}
+                                        </div>
+                                    )}
+
+                                    {isPrereqOpen && !isEditing && (
+                                        <div style={{ marginTop: "0.75rem" }}>
+                                            {prereqLoading ? (
+                                                <p style={{ color: "var(--text-secondary)", margin: 0 }}>
+                                                    Cargando prerequisitos...
+                                                </p>
+                                            ) : (
+                                                <>
+                                                    <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                                                        Selecciona prerequisitos (múltiple)
+                                                    </label>
+                                                    <select
+                                                        className="input"
+                                                        multiple
+                                                        value={prereqSelection}
+                                                        onChange={(e) => {
+                                                            const selected = Array.from(e.target.selectedOptions).map(
+                                                                (o) => o.value
+                                                            );
+                                                            setPrereqSelection(selected);
+                                                        }}
+                                                        style={{ height: "140px" }}
+                                                        disabled={prereqSaving}
+                                                    >
+                                                        {prereqOptions.map((o) => (
+                                                            <option key={o.id} value={o.id}>
+                                                                {o.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                                                        <button
+                                                            className="btn"
+                                                            onClick={savePrereqSelection}
+                                                            disabled={prereqSaving}
+                                                        >
+                                                            {prereqSaving ? "Guardando..." : "Guardar prerequisitos"}
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            onClick={() => openPrereqEditor(mc.id)}
+                                                            disabled={prereqSaving}
+                                                        >
+                                                            Cerrar
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -347,4 +483,3 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
         </div>
     );
 }
-
