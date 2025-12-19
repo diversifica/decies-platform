@@ -16,6 +16,7 @@ from app.models.activity import (
 )
 from app.models.item import Item, ItemType
 from app.models.metric import MasteryState
+from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.tutor import Tutor
@@ -35,7 +36,9 @@ router = APIRouter(prefix="/activities", tags=["activities"])
 
 MAX_ITEMS_PER_MICROCONCEPT = 2
 AT_RISK_PER_CYCLE = 2
+PREREQ_PER_CYCLE = 1
 IN_PROGRESS_PER_CYCLE = 1
+MAX_PREREQ_MICROCONCEPTS = 2
 
 
 def _to_float(value: float | Decimal | None) -> float:
@@ -122,6 +125,173 @@ def _adaptive_order_items_v1(
             interleaved.extend(in_progress_items[p_idx:])
             break
         if p_idx >= len(in_progress_items):
+            interleaved.extend(at_risk_items[a_idx:])
+            break
+
+    ordered = interleaved
+    ordered.extend([i for (_score, _id, i) in dominant])
+    ordered.extend([i for (_id, i) in unknown])
+    ordered.extend(no_microconcept)
+    return ordered
+
+
+def _select_prerequisite_microconcepts_v2(
+    db: Session,
+    *,
+    student_id: uuid.UUID,
+    subject_id: uuid.UUID,
+    term_id: uuid.UUID,
+    mastery_by_microconcept: dict[uuid.UUID, MasteryState],
+    candidate_microconcept_ids: set[uuid.UUID],
+) -> list[uuid.UUID]:
+    targets = [
+        ms
+        for ms in mastery_by_microconcept.values()
+        if ms.status == "at_risk" and ms.last_practice_at is not None
+    ]
+    if not targets:
+        return []
+
+    target_ids = [ms.microconcept_id for ms in targets]
+
+    prereq_rows = (
+        db.query(
+            MicroConceptPrerequisite.microconcept_id,
+            MicroConceptPrerequisite.prerequisite_microconcept_id,
+        )
+        .join(
+            MicroConcept,
+            MicroConcept.id == MicroConceptPrerequisite.prerequisite_microconcept_id,
+        )
+        .filter(
+            MicroConceptPrerequisite.microconcept_id.in_(target_ids),
+            MicroConcept.subject_id == subject_id,
+            MicroConcept.term_id == term_id,
+            MicroConcept.active == True,  # noqa: E712
+        )
+        .all()
+    )
+    if not prereq_rows:
+        return []
+
+    prereq_ids = {
+        prereq_id
+        for (_mcid, prereq_id) in prereq_rows
+        if prereq_id in candidate_microconcept_ids and prereq_id not in target_ids
+    }
+    if not prereq_ids:
+        return []
+
+    scored: list[tuple[float, uuid.UUID]] = []
+    for prereq_id in prereq_ids:
+        ms = mastery_by_microconcept.get(prereq_id)
+        if not ms:
+            continue
+        score = _to_float(ms.mastery_score)
+        if score >= 0.8:
+            continue
+        scored.append((score, prereq_id))
+
+    scored.sort(key=lambda t: (t[0], t[1]))
+    return [prereq_id for (_score, prereq_id) in scored[:MAX_PREREQ_MICROCONCEPTS]]
+
+
+def _adaptive_order_items_v2(
+    db: Session,
+    *,
+    items: list[Item],
+    mastery_by_microconcept: dict[uuid.UUID, MasteryState],
+    student_id: uuid.UUID,
+    subject_id: uuid.UUID,
+    term_id: uuid.UUID,
+    candidate_microconcept_ids: set[uuid.UUID],
+) -> list[Item]:
+    prereq_microconcept_ids = set(
+        _select_prerequisite_microconcepts_v2(
+            db,
+            student_id=student_id,
+            subject_id=subject_id,
+            term_id=term_id,
+            mastery_by_microconcept=mastery_by_microconcept,
+            candidate_microconcept_ids=candidate_microconcept_ids,
+        )
+    )
+
+    if not prereq_microconcept_ids:
+        return _adaptive_order_items_v1(items, mastery_by_microconcept)
+
+    at_risk: list[tuple[float, uuid.UUID, Item]] = []
+    prereq: list[tuple[float, uuid.UUID, Item]] = []
+    in_progress: list[tuple[float, uuid.UUID, Item]] = []
+    dominant: list[tuple[float, uuid.UUID, Item]] = []
+    unknown: list[tuple[uuid.UUID, Item]] = []
+    no_microconcept: list[Item] = []
+
+    for item in items:
+        if not item.microconcept_id:
+            no_microconcept.append(item)
+            continue
+
+        ms = mastery_by_microconcept.get(item.microconcept_id)
+        if not ms:
+            unknown.append((item.id, item))
+            continue
+
+        score = _to_float(ms.mastery_score)
+        key = (score, item.id, item)
+        if ms.status == "at_risk":
+            at_risk.append(key)
+        elif item.microconcept_id in prereq_microconcept_ids:
+            prereq.append(key)
+        elif ms.status == "in_progress":
+            in_progress.append(key)
+        elif ms.status == "dominant":
+            dominant.append(key)
+        else:
+            unknown.append((item.id, item))
+
+    at_risk.sort(key=lambda x: (x[0], x[1]))
+    prereq.sort(key=lambda x: (x[0], x[1]))
+    in_progress.sort(key=lambda x: (x[0], x[1]))
+    dominant.sort(key=lambda x: (x[0], x[1]))
+    unknown.sort(key=lambda x: x[0])
+    no_microconcept.sort(key=lambda x: x.id)
+
+    at_risk_items = [i for (_score, _id, i) in at_risk]
+    prereq_items = [i for (_score, _id, i) in prereq]
+    in_progress_items = [i for (_score, _id, i) in in_progress]
+
+    interleaved: list[Item] = []
+    a_idx = 0
+    r_idx = 0
+    p_idx = 0
+
+    while a_idx < len(at_risk_items) or r_idx < len(prereq_items) or p_idx < len(in_progress_items):
+        for _ in range(AT_RISK_PER_CYCLE):
+            if a_idx >= len(at_risk_items):
+                break
+            interleaved.append(at_risk_items[a_idx])
+            a_idx += 1
+
+        for _ in range(PREREQ_PER_CYCLE):
+            if r_idx >= len(prereq_items):
+                break
+            interleaved.append(prereq_items[r_idx])
+            r_idx += 1
+
+        for _ in range(IN_PROGRESS_PER_CYCLE):
+            if p_idx >= len(in_progress_items):
+                break
+            interleaved.append(in_progress_items[p_idx])
+            p_idx += 1
+
+        if a_idx >= len(at_risk_items) and r_idx >= len(prereq_items):
+            interleaved.extend(in_progress_items[p_idx:])
+            break
+        if a_idx >= len(at_risk_items) and p_idx >= len(in_progress_items):
+            interleaved.extend(prereq_items[r_idx:])
+            break
+        if r_idx >= len(prereq_items) and p_idx >= len(in_progress_items):
             interleaved.extend(at_risk_items[a_idx:])
             break
 
@@ -246,7 +416,15 @@ def create_session(
         db, student_id=session_data.student_id, microconcept_ids=microconcept_ids
     )
 
-    ordered_items = _adaptive_order_items_v1(candidate_items, mastery_by_microconcept)
+    ordered_items = _adaptive_order_items_v2(
+        db,
+        items=candidate_items,
+        mastery_by_microconcept=mastery_by_microconcept,
+        student_id=session_data.student_id,
+        subject_id=session_data.subject_id,
+        term_id=session_data.term_id,
+        candidate_microconcept_ids=microconcept_ids,
+    )
     selected_items = _apply_microconcept_cap(
         ordered_items,
         item_count=session_data.item_count,
