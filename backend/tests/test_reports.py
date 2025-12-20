@@ -9,6 +9,7 @@ from app.core.db import SessionLocal
 from app.core.security import get_password_hash
 from app.main import app
 from app.models.activity import ActivitySession, ActivityType
+from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.models.role import Role
@@ -133,6 +134,19 @@ def test_generate_and_get_latest_report(db_session: Session):
     db_session.add(feedback_session)
     db_session.commit()
 
+    real_grade = RealGrade(
+        student_id=student.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        assessment_date=date(2025, 12, 1),
+        grade_value=7.5,
+        grading_scale="0-10",
+        notes="Buen progreso.",
+        created_by_tutor_id=tutor.id,
+    )
+    db_session.add(real_grade)
+    db_session.commit()
+
     token_res = client.post(
         "/api/v1/login/access-token",
         json={"email": tutor_user.email, "password": password},
@@ -156,6 +170,7 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert payload["student_id"] == str(student.id)
     assert payload["tutor_id"] == str(tutor.id)
     assert len(payload["sections"]) >= 3
+    assert any(s["section_type"] == "real_grades" for s in payload["sections"])
 
     latest_res = client.get(
         f"/api/v1/reports/students/{student.id}/latest",
