@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -317,6 +318,31 @@ class ReportService:
         in_progress_count = sum(1 for (ms, _mc) in mastery_states if ms.status == "in_progress")
         at_risk_count = sum(1 for (ms, _mc) in mastery_states if ms.status == "at_risk")
 
+        report_now = datetime.utcnow()
+        review_due: list[dict[str, Any]] = []
+        review_upcoming: list[dict[str, Any]] = []
+        review_unscheduled_count = 0
+        for ms, mc in mastery_states:
+            next_review = ms.recommended_next_review_at
+            if not next_review:
+                review_unscheduled_count += 1
+                continue
+
+            payload = {
+                "microconcept_id": str(ms.microconcept_id),
+                "name": mc.name,
+                "recommended_next_review_at": next_review.isoformat(),
+                "status": ms.status,
+                "mastery_score": _to_float(ms.mastery_score),
+            }
+            if next_review <= report_now:
+                review_due.append(payload)
+            elif next_review <= report_now + timedelta(days=7):
+                review_upcoming.append(payload)
+
+        review_due.sort(key=lambda e: e["recommended_next_review_at"])
+        review_upcoming.sort(key=lambda e: e["recommended_next_review_at"])
+
         accuracy = _to_float(metrics.accuracy)
         first_attempt_accuracy = _to_float(metrics.first_attempt_accuracy)
         median_time_ms = metrics.median_response_time_ms
@@ -337,6 +363,7 @@ class ReportService:
                 f"{in_progress_count} en progreso, "
                 f"{at_risk_count} en riesgo"
             ),
+            (f"- Revisiones: {len(review_due)} vencidas, {len(review_upcoming)} próximas (7 días)"),
             f"- Recomendaciones pendientes: {len(pending_recommendations)}",
         ]
         if at_risk_count:
@@ -363,7 +390,34 @@ class ReportService:
             "pending_recommendations": len(pending_recommendations),
             "feedback_count": len(feedback_entries),
             "real_grades_count": len(grade_entries),
+            "review_schedule": {
+                "due": len(review_due),
+                "upcoming": len(review_upcoming),
+                "unscheduled": review_unscheduled_count,
+            },
         }
+
+        review_lines: list[str] = []
+        if review_due:
+            review_lines.append("Vencidas:")
+            review_lines.extend(
+                [
+                    f"- {entry['name']} — {entry['recommended_next_review_at'][:10]}"
+                    for entry in review_due[:10]
+                ]
+            )
+        if review_upcoming:
+            if review_lines:
+                review_lines.append("")
+            review_lines.append("Próximos 7 días:")
+            review_lines.extend(
+                [
+                    f"- {entry['name']} — {entry['recommended_next_review_at'][:10]}"
+                    for entry in review_upcoming[:10]
+                ]
+            )
+        if not review_lines:
+            review_lines = ["No hay revisiones vencidas o próximas."]
 
         report = TutorReport(
             id=uuid.uuid4(),
@@ -406,6 +460,19 @@ class ReportService:
                 id=uuid.uuid4(),
                 report_id=report.id,
                 order_index=2,
+                section_type="review_schedule",
+                title="Próximas revisiones",
+                content="\n".join(review_lines),
+                data={
+                    "due": review_due,
+                    "upcoming": review_upcoming,
+                    "unscheduled": review_unscheduled_count,
+                },
+            ),
+            TutorReportSection(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                order_index=3,
                 section_type="real_grades",
                 title="Calificaciones",
                 content=(
@@ -421,7 +488,7 @@ class ReportService:
             TutorReportSection(
                 id=uuid.uuid4(),
                 report_id=report.id,
-                order_index=3,
+                order_index=4,
                 section_type="recommendations",
                 title="Recomendaciones activas",
                 content="\n".join(
@@ -448,7 +515,7 @@ class ReportService:
             TutorReportSection(
                 id=uuid.uuid4(),
                 report_id=report.id,
-                order_index=4,
+                order_index=5,
                 section_type="recommendation_outcomes",
                 title="Impacto de recomendaciones",
                 content=(
@@ -475,7 +542,7 @@ class ReportService:
             TutorReportSection(
                 id=uuid.uuid4(),
                 report_id=report.id,
-                order_index=5,
+                order_index=6,
                 section_type="student_feedback",
                 title="Feedback del alumno",
                 content=(

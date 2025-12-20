@@ -207,6 +207,7 @@ def test_e2e_04_grade_report_recommendation_outcome_flow(db_session: Session):
     assert report_res.status_code == 201
     report = report_res.json()
     assert any(s["section_type"] == "real_grades" for s in report["sections"])
+    assert any(s["section_type"] == "review_schedule" for s in report["sections"])
     assert any(s["section_type"] == "recommendations" for s in report["sections"])
     assert any(s["section_type"] == "recommendation_outcomes" for s in report["sections"])
 
