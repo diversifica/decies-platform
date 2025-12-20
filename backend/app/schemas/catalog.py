@@ -30,3 +30,13 @@ class StudentSummary(BaseModel):
     enrollment_date: datetime | None = None
     email: str | None = None
     full_name: str | None = None
+
+
+class TopicSummary(BaseModel):
+    id: uuid.UUID
+    subject_id: uuid.UUID
+    term_id: uuid.UUID | None = None
+    code: str | None = None
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)

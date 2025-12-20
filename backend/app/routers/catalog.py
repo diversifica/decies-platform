@@ -9,8 +9,9 @@ from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
+from app.models.topic import Topic
 from app.models.user import User
-from app.schemas.catalog import StudentSummary, SubjectSummary, TermSummary
+from app.schemas.catalog import StudentSummary, SubjectSummary, TermSummary, TopicSummary
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -113,3 +114,45 @@ def list_students(
             )
         )
     return results
+
+
+@router.get("/topics", response_model=list[TopicSummary])
+def list_topics(
+    mine: bool = True,
+    subject_id: uuid.UUID | None = None,
+    term_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    role_name = (_get_role_name(db, current_user) or "").casefold()
+
+    query = db.query(Topic)
+
+    if role_name == "student":
+        student = (
+            db.query(Student)
+            .filter((Student.user_id == current_user.id) | (Student.id == current_user.id))
+            .first()
+        )
+        if not student or not student.subject_id:
+            return []
+        query = query.filter(Topic.subject_id == student.subject_id)
+    elif role_name == "tutor":
+        if mine:
+            query = query.join(Subject, Topic.subject_id == Subject.id).filter(
+                Subject.tutor_id == current_user.id
+            )
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
+    if subject_id:
+        if role_name == "tutor" and mine:
+            subject = db.get(Subject, subject_id)
+            if subject and subject.tutor_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Not allowed")
+        query = query.filter(Topic.subject_id == subject_id)
+
+    if term_id:
+        query = query.filter(Topic.term_id == term_id)
+
+    return query.order_by(Topic.order_index, Topic.name).all()

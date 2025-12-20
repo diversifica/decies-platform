@@ -8,11 +8,12 @@ import MetricsDashboard from '../../components/tutor/MetricsDashboard';
 import RecommendationList from '../../components/tutor/RecommendationList';
 import TutorReportPanel from '../../components/tutor/TutorReportPanel';
 import MicroconceptManager from '../../components/tutor/MicroconceptManager';
+import RealGradesPanel from '../../components/tutor/RealGradesPanel';
 import { AuthMe } from '../../services/auth';
 import { fetchStudents, fetchSubjects, fetchTerms, StudentSummary, SubjectSummary, TermSummary } from '../../services/catalog';
 
 export default function TutorPage() {
-    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports' | 'microconcepts'>('content');
+    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports' | 'microconcepts' | 'grades'>('content');
 
     const [me, setMe] = useState<AuthMe | null>(null);
     const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
@@ -175,6 +176,12 @@ export default function TutorPage() {
                         >
                             Microconceptos
                         </button>
+                        <button
+                            onClick={() => setActiveTab('grades')}
+                            style={getTabStyle('grades')}
+                        >
+                            Calificaciones
+                        </button>
                     </div>
 
                     {/* Content */}
@@ -239,6 +246,18 @@ export default function TutorPage() {
                             />
                         ) : (
                             <p>Selecciona asignatura y trimestre para gestionar microconceptos.</p>
+                        )
+                    )}
+
+                    {activeTab === 'grades' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId ? (
+                            <RealGradesPanel
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver calificaciones.</p>
                         )
                     )}
                 </>
