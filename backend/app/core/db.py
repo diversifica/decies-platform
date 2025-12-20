@@ -36,6 +36,7 @@ from app.models import (  # noqa: E402, F401, I001
     microconcept,
     report,
     role,
+    recommendation_catalog,
     student,
     subject,
     term,

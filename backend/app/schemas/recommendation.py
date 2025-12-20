@@ -48,6 +48,7 @@ class RecommendationInstanceBase(BaseModel):
     student_id: uuid.UUID
     microconcept_id: Optional[uuid.UUID] = None
     rule_id: str
+    category: Optional[str] = None
     priority: str
     status: str
     title: str

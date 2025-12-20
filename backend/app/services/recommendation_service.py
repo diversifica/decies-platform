@@ -16,6 +16,7 @@ from app.models.recommendation import (
     RecommendationStatus,
     TutorDecision,
 )
+from app.models.recommendation_catalog import RecommendationCatalog
 from app.schemas.recommendation import (
     RecommendationEvidenceCreate,
     TutorDecisionCreate,
@@ -24,6 +25,19 @@ from app.schemas.recommendation import (
 
 class RecommendationService:
     """Service for generating and managing study recommendations"""
+
+    def __init__(self) -> None:
+        self._catalog_codes_cache: set[str] | None = None
+
+    def _get_catalog_codes(self, db: Session) -> set[str]:
+        if self._catalog_codes_cache is None:
+            rows = (
+                db.query(RecommendationCatalog.code)
+                .filter(RecommendationCatalog.active.is_(True))
+                .all()
+            )
+            self._catalog_codes_cache = {code for (code,) in rows}
+        return self._catalog_codes_cache
 
     @staticmethod
     def _normalize_grade(*, grade_value: float | None, grading_scale: str | None) -> float | None:
@@ -1799,6 +1813,11 @@ class RecommendationService:
         evidence: list[RecommendationEvidenceCreate],
         microconcept_id: Optional[uuid.UUID] = None,
     ) -> Optional[RecommendationInstance]:
+        if rule_id not in self._get_catalog_codes(db):
+            raise ValueError(
+                f"Recommendation rule_id '{rule_id}' not found in recommendation_catalog"
+            )
+
         # Check if active recommendation already exists for this rule/student/concept
         # We don't want to spam duplicates.
         existing = (
