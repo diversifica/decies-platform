@@ -23,6 +23,7 @@ interface MasteryState {
     mastery_score: number;
     status: string;
     last_practice_at: string | null;
+    recommended_next_review_at: string | null;
     total_events: number;
 }
 
@@ -90,6 +91,43 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
         if (ms < 1000) return `${ms}ms`;
         return `${(ms / 1000).toFixed(1)}s`;
     };
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+
+    const getReviewStatus = (ms: MasteryState) => {
+        if (!ms.recommended_next_review_at) {
+            return { kind: 'none' as const, label: 'Sin programación', date: null as Date | null };
+        }
+        const date = new Date(ms.recommended_next_review_at);
+        const diffMs = date.getTime() - nowMs;
+        if (diffMs <= 0) return { kind: 'due' as const, label: 'Vencido', date };
+        if (diffMs <= 7 * DAY_MS) return { kind: 'upcoming' as const, label: 'Próximo', date };
+        return { kind: 'scheduled' as const, label: 'Programado', date };
+    };
+
+    const getReviewBadgeColor = (kind: 'due' | 'upcoming' | 'scheduled' | 'none') => {
+        switch (kind) {
+            case 'due': return 'var(--error)';
+            case 'upcoming': return 'var(--warning)';
+            case 'scheduled': return 'var(--success)';
+            default: return 'var(--text-secondary)';
+        }
+    };
+
+    const sortedMasteryStates = [...masteryStates].sort((a, b) => {
+        const ra = getReviewStatus(a);
+        const rb = getReviewStatus(b);
+        const rank = (k: typeof ra.kind) => (k === 'due' ? 0 : k === 'upcoming' ? 1 : k === 'scheduled' ? 2 : 3);
+        const rdiff = rank(ra.kind) - rank(rb.kind);
+        if (rdiff !== 0) return rdiff;
+        const ta = ra.date?.getTime() ?? Number.POSITIVE_INFINITY;
+        const tb = rb.date?.getTime() ?? Number.POSITIVE_INFINITY;
+        return ta - tb;
+    });
+
+    const dueCount = masteryStates.filter((ms) => getReviewStatus(ms).kind === 'due').length;
+    const upcomingCount = masteryStates.filter((ms) => getReviewStatus(ms).kind === 'upcoming').length;
 
     const bootstrapDomain = async () => {
         setBootstrapLoading(true);
@@ -181,30 +219,59 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {masteryStates.map((ms) => (
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div className="card" style={{ padding: '0.75rem 1rem' }}>
+                                <strong>Revisión vencida:</strong> {dueCount}
+                            </div>
+                            <div className="card" style={{ padding: '0.75rem 1rem' }}>
+                                <strong>Próximos 7 días:</strong> {upcomingCount}
+                            </div>
+                            <div className="card" style={{ padding: '0.75rem 1rem' }}>
+                                <strong>Total microconceptos:</strong> {masteryStates.length}
+                            </div>
+                        </div>
+
+                        {sortedMasteryStates.map((ms) => {
+                            const review = getReviewStatus(ms);
+                            return (
                             <div
                                 key={ms.microconcept_id}
                                 style={{
                                     padding: '1rem',
                                     backgroundColor: 'var(--bg-primary)',
                                     borderRadius: 'var(--radius-md)',
-                                    borderLeft: `4px solid ${getStatusColor(ms.status)}`
+                                    borderLeft: `4px solid ${getStatusColor(ms.status)}`,
+                                    outline: review.kind === 'due' ? `2px solid ${getReviewBadgeColor('due')}` : undefined
                                 }}
                             >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                     <h4 style={{ margin: 0 }}>{ms.microconcept_name}</h4>
-                                    <span
-                                        style={{
-                                            padding: '0.25rem 0.75rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            backgroundColor: getStatusColor(ms.status),
-                                            color: 'white',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 'bold'
-                                        }}
-                                    >
-                                        {getStatusLabel(ms.status)}
-                                    </span>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <span
+                                            style={{
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                backgroundColor: getStatusColor(ms.status),
+                                                color: 'white',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 'bold'
+                                            }}
+                                        >
+                                            {getStatusLabel(ms.status)}
+                                        </span>
+                                        <span
+                                            style={{
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                backgroundColor: getReviewBadgeColor(review.kind),
+                                                color: 'white',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 'bold'
+                                            }}
+                                        >
+                                            Revisión: {review.label}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '2rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
@@ -219,6 +286,10 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                                             <strong>Última Práctica:</strong> {new Date(ms.last_practice_at).toLocaleDateString()}
                                         </div>
                                     )}
+                                    <div>
+                                        <strong>Siguiente Revisión:</strong>{' '}
+                                        {review.date ? review.date.toLocaleDateString() : '—'}
+                                    </div>
                                 </div>
 
                                 <div style={{ marginTop: '0.75rem', height: '8px', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
@@ -232,7 +303,8 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                                     />
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
