@@ -8,7 +8,12 @@ from app.models.activity import ActivitySession, ActivityType
 from app.models.grade import AssessmentScopeTag, RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
-from app.models.recommendation import RecommendationInstance, RecommendationStatus
+from app.models.recommendation import (
+    RecommendationInstance,
+    RecommendationPriority,
+    RecommendationStatus,
+)
+from app.models.recommendation_catalog import RecommendationCatalog
 from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
@@ -770,6 +775,35 @@ def test_generate_recommendations_r35_prioritize_key_exam_microconcept(db_sessio
     assert any(ev.key == "tag_weight" for ev in r35.evidence)
 
 
+def test_recommendation_catalog_guardrail_blocks_unknown_rule(db_session, context):
+    """Ensure RecommendationService refuses unknown codes outside recommendation_catalog."""
+    student = context["student"]
+
+    if not db_session.query(RecommendationCatalog).filter_by(code="R01").first():
+        db_session.add(
+            RecommendationCatalog(
+                code="R01",
+                title="Catalog R01",
+                description="Catalog seed for tests",
+                category="focus",
+                active=True,
+                catalog_version="V1",
+            )
+        )
+        db_session.commit()
+
+    with pytest.raises(ValueError):
+        recommendation_service._create_or_get_recommendation(
+            db_session,
+            student_id=student.id,
+            rule_id="RX99",
+            title="Invalid",
+            description="Invalid",
+            priority=RecommendationPriority.HIGH,
+            evidence=[],
+        )
+
+
 def test_tutor_decision(db_session, context):
     """Test accepting a recommendation"""
     student = context["student"]
@@ -778,7 +812,7 @@ def test_tutor_decision(db_session, context):
     # Create a recommendation directly
     rec = RecommendationInstance(
         student_id=student.id,
-        rule_id="TEST",
+        rule_id="R01",
         title="Test Rec",
         description="...",
         status=RecommendationStatus.PENDING,

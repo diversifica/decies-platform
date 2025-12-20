@@ -16,6 +16,7 @@ interface Recommendation {
     priority: 'high' | 'medium' | 'low';
     status: 'pending' | 'accepted' | 'rejected';
     rule_id: string;
+    category?: string | null;
     generated_at: string;
     evidence: Evidence[];
     outcome?: {
@@ -40,6 +41,16 @@ interface RecommendationCardProps {
 
 export default function RecommendationCard({ recommendation, tutorId, onDecisionMade }: RecommendationCardProps) {
     const [loading, setLoading] = useState(false);
+
+    const categoryLabel = (category: string | null | undefined) => {
+        switch ((category || '').toLowerCase()) {
+            case 'focus': return 'Focus';
+            case 'strategy': return 'Estrategia';
+            case 'dosage': return 'Dosificación';
+            case 'external_validation': return 'Validación externa';
+            default: return null;
+        }
+    };
 
     const handleDecision = async (decision: 'accepted' | 'rejected') => {
         setLoading(true);
@@ -89,9 +100,19 @@ export default function RecommendationCard({ recommendation, tutorId, onDecision
         <div className="card" style={{ borderLeft: `4px solid ${getPriorityColor(recommendation.priority)}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                    <span className="badge" style={{ backgroundColor: getPriorityColor(recommendation.priority), marginBottom: '0.5rem' }}>
-                        {recommendation.priority.toUpperCase()}
-                    </span>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                        <span className="badge" style={{ backgroundColor: getPriorityColor(recommendation.priority) }}>
+                            {recommendation.priority.toUpperCase()}
+                        </span>
+                        <span className="badge" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}>
+                            {recommendation.rule_id}
+                        </span>
+                        {categoryLabel(recommendation.category) && (
+                            <span className="badge" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
+                                {categoryLabel(recommendation.category)}
+                            </span>
+                        )}
+                    </div>
                     <h3 style={{ margin: '0.5rem 0' }}>{recommendation.title}</h3>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

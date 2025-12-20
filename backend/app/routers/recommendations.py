@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_role_name, get_current_tutor
 from app.models.recommendation import RecommendationInstance
+from app.models.recommendation_catalog import RecommendationCatalog
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
@@ -76,6 +77,17 @@ def get_student_recommendations(
         RecommendationInstance.priority,
         RecommendationInstance.generated_at.desc(),
     ).all()
+
+    codes = {r.rule_id for r in recommendations}
+    if codes:
+        catalog_rows = (
+            db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+            .filter(RecommendationCatalog.code.in_(codes))
+            .all()
+        )
+        category_by_code = {code: category for code, category in catalog_rows}
+        for rec in recommendations:
+            setattr(rec, "category", category_by_code.get(rec.rule_id))
     return recommendations
 
 
@@ -101,6 +113,13 @@ def get_recommendation(
     )
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
+
+    category = (
+        db.query(RecommendationCatalog.category)
+        .filter(RecommendationCatalog.code == rec.rule_id)
+        .scalar()
+    )
+    setattr(rec, "category", category)
 
     student = db.get(Student, rec.student_id)
     if student and student.subject_id:
