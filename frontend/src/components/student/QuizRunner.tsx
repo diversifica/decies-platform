@@ -13,12 +13,12 @@ interface Item {
 }
 
 interface QuizRunnerProps {
-    uploadId: string;
+    uploadId?: string;
     studentId: string;
     subjectId: string;
     termId: string;
     onExit: () => void;
-    activityCode?: 'QUIZ' | 'EXAM_STYLE';
+    activityCode?: 'QUIZ' | 'EXAM_STYLE' | 'REVIEW';
     examMode?: boolean;
     timeLimitSeconds?: number;
     itemCount?: number;
@@ -93,16 +93,18 @@ export default function QuizRunner({
                 if (!cancelled) setActivityTypeId(selectedType.id);
 
                 // 2. Create activity session
-                const sessionRes = await api.post('/activities/sessions', {
+                const sessionPayload: any = {
                     student_id: studentId,
                     activity_type_id: selectedType.id,
                     subject_id: subjectId,
                     term_id: termId,
                     topic_id: null,
                     item_count: itemCount,
-                    content_upload_id: uploadId,
                     device_type: 'web'
-                });
+                };
+                if (uploadId) sessionPayload.content_upload_id = uploadId;
+
+                const sessionRes = await api.post('/activities/sessions', sessionPayload);
                 if (!cancelled) setSessionId(sessionRes.data.id);
 
                 // 3. Get session items (ordered)
@@ -123,7 +125,11 @@ export default function QuizRunner({
                     if (detail === 'Not enough permissions') {
                         setInitError('Necesitas iniciar sesión como estudiante.');
                     } else if (detail === 'No items found for this subject/term') {
-                        setInitError('Este contenido aún no tiene preguntas para esta actividad. Pide al tutor que lo procese.');
+                        if (activityCode === 'REVIEW') {
+                            setInitError('No hay ítems disponibles para revisión todavía.');
+                        } else {
+                            setInitError('Este contenido aún no tiene preguntas para esta actividad. Pide al tutor que lo procese.');
+                        }
                     } else if (typeof detail === 'string' && detail.length > 0) {
                         setInitError(detail);
                     } else {
@@ -171,7 +177,7 @@ export default function QuizRunner({
         return () => clearInterval(timerId);
     }, [examMode, examEndsAtMs, finished, sessionId, finishSession]);
 
-    if (loading) return <p>Cargando preguntas...</p>;
+    if (loading) return <p>Cargando actividad...</p>;
     if (initError) {
         return (
             <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -182,7 +188,15 @@ export default function QuizRunner({
         );
     }
     if (!sessionId || !activityTypeId) return <p>Cargando sesión...</p>;
-    if (items.length === 0) return <p>No hay preguntas disponibles para este contenido.</p>;
+    if (items.length === 0) {
+        return (
+            <p>
+                {activityCode === 'REVIEW'
+                    ? 'No hay ítems disponibles para revisión todavía.'
+                    : 'No hay preguntas disponibles para este contenido.'}
+            </p>
+        );
+    }
 
     const currentItem = items[currentIndex];
     const options: string[] = Array.isArray(currentItem.options)
