@@ -942,6 +942,368 @@ class RecommendationService:
             if rec:
                 generated_recs.append(rec)
 
+        # Dosage rules (R22-R30)
+        sessions_7d_start = now - timedelta(days=7)
+        sessions_3d_start = now - timedelta(days=3)
+        sessions_30d_start = now - timedelta(days=30)
+
+        recent_sessions_rows = (
+            db.query(ActivitySession)
+            .filter(
+                ActivitySession.student_id == student_id,
+                ActivitySession.subject_id == subject_id,
+                ActivitySession.term_id == term_id,
+                ActivitySession.started_at >= sessions_7d_start,
+            )
+            .all()
+        )
+        total_sessions_7d = len(recent_sessions_rows)
+        abandoned_sessions_7d = sum(1 for s in recent_sessions_rows if s.status == "abandoned")
+        completed_durations_min = [
+            (s.ended_at - s.started_at).total_seconds() / 60
+            for s in recent_sessions_rows
+            if s.ended_at is not None
+        ]
+        avg_duration_min = (
+            (sum(completed_durations_min) / len(completed_durations_min))
+            if completed_durations_min
+            else None
+        )
+
+        sessions_3d = sum(1 for s in recent_sessions_rows if s.started_at >= sessions_3d_start)
+        sessions_per_day: dict[str, int] = {}
+        for s in recent_sessions_rows:
+            key = s.started_at.date().isoformat()
+            sessions_per_day[key] = sessions_per_day.get(key, 0) + 1
+        days_with_sessions = len(sessions_per_day)
+        max_sessions_day = max(sessions_per_day.values(), default=0)
+
+        abandon_rate_effective = (
+            float(metrics.abandon_rate) if metrics and metrics.abandon_rate is not None else None
+        )
+        if abandon_rate_effective is None:
+            sessions_30d = (
+                db.query(ActivitySession)
+                .filter(
+                    ActivitySession.student_id == student_id,
+                    ActivitySession.subject_id == subject_id,
+                    ActivitySession.term_id == term_id,
+                    ActivitySession.started_at >= sessions_30d_start,
+                )
+                .all()
+            )
+            total_sessions_30d = len(sessions_30d)
+            abandoned_sessions_30d = sum(1 for s in sessions_30d if s.status == "abandoned")
+            abandon_rate_effective = (
+                abandoned_sessions_30d / total_sessions_30d if total_sessions_30d else 0.0
+            )
+
+        # Rule R22: Increase frequency of short sessions when sessions are long.
+        if avg_duration_min is not None and avg_duration_min > 12 and total_sessions_7d < 6:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R22",
+                title="Aumentar sesiones cortas",
+                description=(
+                    "Las sesiones recientes tienden a ser largas. Conviene dividir en sesiones "
+                    "más cortas y frecuentes para mantener atención y reducir fatiga."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="avg_session_duration_min_7d",
+                        value=f"{avg_duration_min:.1f}",
+                        description="Duración media de sesión (7 días)",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="total_sessions_7d",
+                        value=str(total_sessions_7d),
+                        description="Sesiones en 7 días",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R23: Introduce breaks when abandonment is high.
+        if abandon_rate_effective >= 0.2 or abandoned_sessions_7d >= 2:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R23",
+                title="Introducir descansos",
+                description=(
+                    "Se detecta abandono o interrupciones frecuentes. Conviene insertar descansos "
+                    "breves o pausar la sesión cuando baje la atención."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="abandon_rate",
+                        value=str(abandon_rate_effective),
+                        description="Tasa de abandono estimada",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="abandoned_sessions_7d",
+                        value=str(abandoned_sessions_7d),
+                        description="Sesiones abandonadas en 7 días",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R24: Adjust pace when time/accuracy mismatch suggests rushing or dragging.
+        if accuracy is not None and median_response_time_ms is not None:
+            if (median_response_time_ms < 6000 and accuracy < 0.7) or (
+                median_response_time_ms > 25000 and accuracy > 0.8
+            ):
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R24",
+                    title="Ajustar ritmo",
+                    description=(
+                        "El ritmo actual no parece óptimo. Conviene ajustar el tempo (más pausado "
+                        "si se precipita con errores, o más ágil si tarda mucho con alto acierto)."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="median_response_time_ms",
+                            value=str(median_response_time_ms),
+                            description="Tiempo mediano de respuesta",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión global",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R25: Reflective pause when answering too fast with many errors.
+        if accuracy is not None and median_response_time_ms is not None:
+            if median_response_time_ms < 4500 and accuracy < 0.6:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R25",
+                    title="Añadir pausa reflexiva",
+                    description=(
+                        "Se detecta respuesta muy rápida con muchos errores. Conviene añadir una "
+                        "pausa breve antes de responder para mejorar precisión."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="median_response_time_ms",
+                            value=str(median_response_time_ms),
+                            description="Tiempo mediano muy bajo",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión baja",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R26: Increase automation when accuracy is high but responses are slow.
+        if accuracy is not None and median_response_time_ms is not None:
+            if accuracy >= 0.8 and median_response_time_ms > 15000:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R26",
+                    title="Aumentar automatización",
+                    description=(
+                        "El alumno acierta pero tarda demasiado. Conviene practicar "
+                        "para automatizar y reducir el tiempo de respuesta manteniendo el acierto."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión alta",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="median_response_time_ms",
+                            value=str(median_response_time_ms),
+                            description="Tiempo mediano alto",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R27: Reduce daily volume when activity is very high but performance is weak.
+        if accuracy is not None and accuracy < 0.65:
+            if total_sessions_7d >= 10 or sessions_3d >= 6:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R27",
+                    title="Reducir volumen diario",
+                    description=(
+                        "Hay mucha carga de práctica reciente y el rendimiento es bajo. "
+                        "Conviene reducir volumen diario para evitar retroceso por sobrecarga."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="total_sessions_7d",
+                            value=str(total_sessions_7d),
+                            description="Sesiones en 7 días",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="sessions_3d",
+                            value=str(sessions_3d),
+                            description="Sesiones en 3 días",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión baja con alta carga",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R28: Increase volume when performance is stable and risk is low.
+        if (
+            accuracy is not None
+            and accuracy >= 0.85
+            and at_risk_count == 0
+            and total_sessions_7d < 3
+        ):
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R28",
+                title="Incrementar volumen",
+                description=(
+                    "El rendimiento es alto y estable. Conviene aumentar gradualmente el volumen "
+                    "de práctica para aprovechar el margen de progreso."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(accuracy),
+                        description="Precisión alta",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="total_sessions_7d",
+                        value=str(total_sessions_7d),
+                        description="Sesiones en 7 días",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R29: Adjust difficulty upward when performance is very strong.
+        if (
+            accuracy is not None
+            and accuracy >= 0.9
+            and median_response_time_ms is not None
+            and median_response_time_ms < 8000
+            and attempts_per_item_avg is not None
+            and attempts_per_item_avg <= 1.3
+        ):
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R29",
+                title="Ajustar dificultad",
+                description=(
+                    "El rendimiento es muy alto y estable. Conviene aumentar la dificultad "
+                    "para mantener el reto y seguir progresando."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(accuracy),
+                        description="Precisión muy alta",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="median_response_time_ms",
+                        value=str(median_response_time_ms),
+                        description="Tiempo mediano bajo",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="attempts_per_item_avg",
+                        value=str(attempts_per_item_avg),
+                        description="Pocos intentos por ítem",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R30: Alternate intensive and light days when practicing almost every day.
+        if total_sessions_7d >= 8 and days_with_sessions >= 6:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R30",
+                title="Alternar días intensivos y ligeros",
+                description=(
+                    "La práctica se concentra casi todos los días. Conviene alternar "
+                    "días intensivos y días ligeros para estabilizar el rendimiento semanal."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="total_sessions_7d",
+                        value=str(total_sessions_7d),
+                        description="Sesiones en 7 días",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="days_with_sessions_7d",
+                        value=str(days_with_sessions),
+                        description="Días con sesiones en 7 días",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="max_sessions_in_day_7d",
+                        value=str(max_sessions_day),
+                        description="Máximo de sesiones en un día (7 días)",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
         return generated_recs
 
     def _create_or_get_recommendation(

@@ -515,6 +515,186 @@ def test_generate_recommendations_r17_examples_for_weak_microconcept(db_session,
     assert any(ev.key == "mastery_score" for ev in r17.evidence)
 
 
+def test_generate_recommendations_r23_breaks_on_abandon(db_session, context):
+    """Test R23: abandonment triggers break recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    quiz_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    if not quiz_type:
+        quiz_type = ActivityType(code="QUIZ", name="Quiz", active=True)
+        db_session.add(quiz_type)
+        db_session.flush()
+
+    now = datetime.utcnow()
+    db_session.add_all(
+        [
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=now - timedelta(days=1),
+                ended_at=None,
+                status="abandoned",
+                device_type="web",
+            ),
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=now - timedelta(days=2),
+                ended_at=None,
+                status="abandoned",
+                device_type="web",
+            ),
+        ]
+    )
+
+    agg = MetricAggregate(
+        student_id=student.id,
+        scope_type="subject",
+        scope_id=subject.id,
+        accuracy=0.7,
+        first_attempt_accuracy=0.6,
+        median_response_time_ms=9000,
+        attempts_per_item_avg=1.4,
+        hint_rate=0.1,
+        abandon_rate=0.3,
+        window_start=datetime.now(),
+        window_end=datetime.now(),
+        computed_at=datetime.now(),
+    )
+    db_session.add(agg)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r23 = next((r for r in recs if r.rule_id == "R23"), None)
+    assert r23 is not None
+    assert any(ev.key == "abandon_rate" for ev in r23.evidence)
+
+
+def test_generate_recommendations_r26_automation_when_slow_but_correct(db_session, context):
+    """Test R26: high accuracy + slow responses triggers automation recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    agg = MetricAggregate(
+        student_id=student.id,
+        scope_type="subject",
+        scope_id=subject.id,
+        accuracy=0.9,
+        first_attempt_accuracy=0.85,
+        median_response_time_ms=20000,
+        attempts_per_item_avg=1.1,
+        hint_rate=0.1,
+        abandon_rate=0.0,
+        window_start=datetime.now(),
+        window_end=datetime.now(),
+        computed_at=datetime.now(),
+    )
+    db_session.add(agg)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r26 = next((r for r in recs if r.rule_id == "R26"), None)
+    assert r26 is not None
+    assert any(ev.key == "median_response_time_ms" for ev in r26.evidence)
+
+
+def test_generate_recommendations_r30_alternate_intensive_light_days(db_session, context):
+    """Test R30: many active days triggers alternation recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    quiz_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    if not quiz_type:
+        quiz_type = ActivityType(code="QUIZ", name="Quiz", active=True)
+        db_session.add(quiz_type)
+        db_session.flush()
+
+    now = datetime.utcnow()
+    sessions = []
+    for offset in range(1, 7):
+        start = now - timedelta(days=offset)
+        sessions.append(
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=start,
+                ended_at=start + timedelta(minutes=5),
+                status="completed",
+                device_type="web",
+            )
+        )
+    start = now - timedelta(days=1, hours=1)
+    sessions.append(
+        ActivitySession(
+            student_id=student.id,
+            activity_type_id=quiz_type.id,
+            subject_id=subject.id,
+            term_id=term.id,
+            topic_id=None,
+            started_at=start,
+            ended_at=start + timedelta(minutes=5),
+            status="completed",
+            device_type="web",
+        )
+    )
+    start = now - timedelta(days=2, hours=1)
+    sessions.append(
+        ActivitySession(
+            student_id=student.id,
+            activity_type_id=quiz_type.id,
+            subject_id=subject.id,
+            term_id=term.id,
+            topic_id=None,
+            started_at=start,
+            ended_at=start + timedelta(minutes=5),
+            status="completed",
+            device_type="web",
+        )
+    )
+    db_session.add_all(sessions)
+
+    agg = MetricAggregate(
+        student_id=student.id,
+        scope_type="subject",
+        scope_id=subject.id,
+        accuracy=0.75,
+        first_attempt_accuracy=0.7,
+        median_response_time_ms=10000,
+        attempts_per_item_avg=1.3,
+        hint_rate=0.1,
+        abandon_rate=0.0,
+        window_start=datetime.now(),
+        window_end=datetime.now(),
+        computed_at=datetime.now(),
+    )
+    db_session.add(agg)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r30 = next((r for r in recs if r.rule_id == "R30"), None)
+    assert r30 is not None
+    assert any(ev.key == "days_with_sessions_7d" for ev in r30.evidence)
+
+
 def test_tutor_decision(db_session, context):
     """Test accepting a recommendation"""
     student = context["student"]
