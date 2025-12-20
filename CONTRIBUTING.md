@@ -141,3 +141,8 @@ make lint          # Todos los linters
 make lint-fix      # Auto-fix linting
 make db-reset      # Reset DB + migraciones
 ```
+
+## IntegraciÇün con GitHub Issues
+
+- Antes de empezar un sprint, crear las issues del sprint en GitHub (una por dÇða o por entregable), salvo que haya un plan diferente especificado explÇðcitamente en la documentaciÇün.
+- En cada Pull Request, vincular la issue correspondiente en la descripciÇün usando `Fixes #NN` (o `Closes #NN`) para que GitHub la cierre automÇ­ticamente al hacer merge.
