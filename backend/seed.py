@@ -169,6 +169,7 @@ def seed_db():
         activity_types_data = [
             ("QUIZ", "Quiz Interactivo"),
             ("MATCH", "Emparejar Conceptos"),
+            ("CLOZE", "Completar Huecos"),
             ("REVIEW", "Revisión Espaciada"),
         ]
 
@@ -279,6 +280,20 @@ def seed_db():
                 db.add(item)
                 logger.info(f"Created test Item {i + 1}")
 
+            cloze_item = Item(
+                id=uuid.uuid4(),
+                content_upload_id=test_upload.id,
+                microconcept_id=first_mc.id if first_mc else None,
+                type=ItemType.CLOZE,
+                stem="Completa: 2 + 2 = ____",
+                options={"placeholder": "____"},
+                correct_answer="4",
+                explanation="2 + 2 = 4.",
+                difficulty=1,
+            )
+            db.add(cloze_item)
+            logger.info("Created test CLOZE Item")
+
             match_mcs = (
                 db.query(MicroConcept)
                 .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
@@ -305,6 +320,28 @@ def seed_db():
 
             db.commit()
         else:
+            existing_cloze = (
+                db.query(Item)
+                .filter(Item.content_upload_id == test_upload.id, Item.type == ItemType.CLOZE)
+                .first()
+            )
+            if not existing_cloze:
+                first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
+                cloze_item = Item(
+                    id=uuid.uuid4(),
+                    content_upload_id=test_upload.id,
+                    microconcept_id=first_mc.id if first_mc else None,
+                    type=ItemType.CLOZE,
+                    stem="Completa: 2 + 2 = ____",
+                    options={"placeholder": "____"},
+                    correct_answer="4",
+                    explanation="2 + 2 = 4.",
+                    difficulty=1,
+                )
+                db.add(cloze_item)
+                db.commit()
+                logger.info("Created missing test CLOZE Item")
+
             existing_match = (
                 db.query(Item)
                 .filter(

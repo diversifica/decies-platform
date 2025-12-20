@@ -523,6 +523,133 @@ def test_create_activity_session_adaptive_selection_includes_prerequisites(db_se
     assert max(counts.values()) <= 2
 
 
+def test_cloze_activity_session_grades_answer(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    tutor = db_session.query(Tutor).first()
+    assert subject is not None
+    assert term is not None
+    assert tutor is not None
+
+    cloze_type = db_session.query(ActivityType).filter_by(code="CLOZE").first()
+    if not cloze_type:
+        cloze_type = ActivityType(id=uuid.uuid4(), code="CLOZE", name="Cloze", active=True)
+        db_session.add(cloze_type)
+        db_session.commit()
+
+    mc = (
+        db_session.query(MicroConcept)
+        .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+        .order_by(MicroConcept.created_at.asc())
+        .first()
+    )
+    if not mc:
+        mc = MicroConcept(
+            id=uuid.uuid4(),
+            subject_id=subject.id,
+            term_id=term.id,
+            code=f"MC-CLOZE-{uuid.uuid4()}",
+            name="Cloze Concept",
+            description="",
+            active=True,
+        )
+        db_session.add(mc)
+        db_session.flush()
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="cloze_test.pdf",
+        storage_uri="/test/cloze_test.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    item = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc.id,
+        type=ItemType.CLOZE,
+        stem="Completa: 2 + 2 = ____",
+        options={"placeholder": "____"},
+        correct_answer="4",
+        explanation="2 + 2 = 4.",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(cloze_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 1,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = uuid.UUID(session_res.json()["id"])
+
+    items_res = client.get(f"/api/v1/activities/sessions/{session_id}/items", headers=headers)
+    assert items_res.status_code == 200
+    session_items = items_res.json()
+    assert len(session_items) == 1
+    assert session_items[0]["type"] == "cloze"
+
+    start_time = datetime.utcnow()
+    end_time = datetime.utcnow()
+    resp_res = client.post(
+        f"/api/v1/activities/sessions/{session_id}/responses",
+        json={
+            "student_id": str(student.id),
+            "item_id": str(item.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "microconcept_id": None,
+            "activity_type_id": str(cloze_type.id),
+            "is_correct": False,
+            "duration_ms": 1000,
+            "attempt_number": 1,
+            "response_normalized": "4",
+            "hint_used": None,
+            "difficulty_at_time": None,
+            "timestamp_start": start_time.isoformat(),
+            "timestamp_end": end_time.isoformat(),
+        },
+        headers=headers,
+    )
+    assert resp_res.status_code == 200
+    assert resp_res.json()["is_correct"] is True
+
+
 def test_submit_activity_session_feedback(db_session):
     token_res = client.post(
         "/api/v1/login/access-token",

@@ -5,6 +5,7 @@ import AuthPanel from '../../components/auth/AuthPanel';
 import api from '../../services/api';
 import QuizRunner from '../../components/student/QuizRunner';
 import MatchRunner from '../../components/student/MatchRunner';
+import ClozeRunner from '../../components/student/ClozeRunner';
 import { AuthMe } from '../../services/auth';
 
 interface Upload {
@@ -19,7 +20,7 @@ export default function StudentPage() {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
-    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH'>('QUIZ');
+    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH' | 'CLOZE'>('QUIZ');
     const [me, setMe] = useState<AuthMe | null>(null);
     const [actionError, setActionError] = useState<string>('');
     const [actionLoading, setActionLoading] = useState(false);
@@ -50,7 +51,7 @@ export default function StudentPage() {
         loadUploads();
     }, [studentId]);
 
-    const openActivity = async (upload: Upload, mode: 'QUIZ' | 'MATCH') => {
+    const openActivity = async (upload: Upload, mode: 'QUIZ' | 'MATCH' | 'CLOZE') => {
         if (!studentId) return;
         setActionError('');
         setActionLoading(true);
@@ -59,6 +60,7 @@ export default function StudentPage() {
             const items: any[] = Array.isArray(res.data) ? res.data : [];
             const hasMatch = items.some((i) => i?.type === 'match');
             const hasQuiz = items.some((i) => i?.type === 'multiple_choice' || i?.type === 'true_false');
+            const hasCloze = items.some((i) => i?.type === 'cloze');
 
             if (mode === 'MATCH' && !hasMatch) {
                 setActionError('Este contenido aún no tiene ítems MATCH. Por ahora usa Quiz.');
@@ -66,6 +68,10 @@ export default function StudentPage() {
             }
             if (mode === 'QUIZ' && !hasQuiz) {
                 setActionError('Este contenido aún no tiene preguntas de Quiz. Pide al tutor que lo procese.');
+                return;
+            }
+            if (mode === 'CLOZE' && !hasCloze) {
+                setActionError('Este contenido aún no tiene ítems CLOZE. Por ahora usa Quiz.');
                 return;
             }
 
@@ -85,6 +91,14 @@ export default function StudentPage() {
         }
         return selectedMode === 'MATCH' ? (
             <MatchRunner
+                uploadId={selectedUpload.id}
+                studentId={studentId}
+                subjectId={selectedUpload.subject_id}
+                termId={selectedUpload.term_id}
+                onExit={() => setSelectedUpload(null)}
+            />
+        ) : selectedMode === 'CLOZE' ? (
+            <ClozeRunner
                 uploadId={selectedUpload.id}
                 studentId={studentId}
                 subjectId={selectedUpload.subject_id}
@@ -138,6 +152,13 @@ export default function StudentPage() {
                                     className="btn btn-secondary"
                                 >
                                     {actionLoading ? 'Cargando...' : 'Match'}
+                                </button>
+                                <button
+                                    disabled={!studentId || actionLoading}
+                                    onClick={() => openActivity(upload, 'CLOZE')}
+                                    className="btn btn-secondary"
+                                >
+                                    {actionLoading ? 'Cargando...' : 'Cloze'}
                                 </button>
                             </div>
                         </div>

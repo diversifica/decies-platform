@@ -13,6 +13,7 @@ class ItemType(str, enum.Enum):
     MCQ = "multiple_choice"
     TRUE_FALSE = "true_false"
     MATCH = "match"
+    CLOZE = "cloze"
 
 
 class Item(Base):
