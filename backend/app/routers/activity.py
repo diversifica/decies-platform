@@ -2,6 +2,7 @@ import json
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from unicodedata import combining, normalize
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -386,6 +387,8 @@ def create_session(
     allowed_item_types: list[ItemType]
     if activity_type.code == "MATCH":
         allowed_item_types = [ItemType.MATCH]
+    elif activity_type.code == "CLOZE":
+        allowed_item_types = [ItemType.CLOZE]
     else:
         # Default: QUIZ-like items
         allowed_item_types = [ItemType.MCQ, ItemType.TRUE_FALSE]
@@ -563,6 +566,37 @@ def _compute_match_correct(item: Item, response_normalized: str | None) -> bool:
     return normalized_submitted == expected
 
 
+def _normalize_text(text: str) -> str:
+    # Normalize (case/whitespace/diacritics) for tolerant comparisons.
+    decomposed = normalize("NFKD", text)
+    without_diacritics = "".join(ch for ch in decomposed if not combining(ch))
+    collapsed = " ".join(without_diacritics.strip().split())
+    return collapsed.casefold()
+
+
+def _compute_cloze_correct(item: Item, response_normalized: str | None) -> bool:
+    if not response_normalized:
+        return False
+
+    submitted = _normalize_text(response_normalized)
+    if not submitted:
+        return False
+
+    # Allow multiple acceptable answers stored as JSON array in correct_answer.
+    acceptable: list[str] = []
+    try:
+        parsed = json.loads(item.correct_answer)
+        if isinstance(parsed, list):
+            acceptable = [str(x) for x in parsed if isinstance(x, (str, int, float))]
+    except json.JSONDecodeError:
+        acceptable = []
+
+    if not acceptable:
+        acceptable = [item.correct_answer]
+
+    return any(_normalize_text(ans) == submitted for ans in acceptable if isinstance(ans, str))
+
+
 @router.post("/sessions/{session_id}/responses", response_model=LearningEventResponse)
 def record_response(
     session_id: uuid.UUID,
@@ -598,6 +632,8 @@ def record_response(
     is_correct = event_data.is_correct
     if item.type == ItemType.MATCH:
         is_correct = _compute_match_correct(item, event_data.response_normalized)
+    elif item.type == ItemType.CLOZE:
+        is_correct = _compute_cloze_correct(item, event_data.response_normalized)
 
     # Create learning event
     event = LearningEvent(
