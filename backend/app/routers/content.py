@@ -27,7 +27,7 @@ from app.models.tutor import Tutor
 from app.models.user import User
 from app.pipelines.processing import process_content_upload
 from app.schemas.content import ContentUploadResponse
-from app.schemas.item import ItemResponse
+from app.schemas.item import ItemActivationUpdate, ItemResponse
 from app.services.storage import StorageService
 
 # TODO: Auth dependency to get current user/tutor
@@ -178,12 +178,36 @@ def get_upload_items(
     else:
         raise HTTPException(status_code=403, detail="Role not allowed")
 
-    items = (
-        db.query(Item)
-        .filter(
-            Item.content_upload_id == upload_id,
-            Item.is_active.is_(True),
-        )
-        .all()
-    )
+    query = db.query(Item).filter(Item.content_upload_id == upload_id)
+    if role_name == "student":
+        query = query.filter(Item.is_active.is_(True))
+    items = query.all()
     return items
+
+
+@router.patch("/uploads/{upload_id}/items/{item_id}", response_model=ItemResponse)
+def set_item_active_state(
+    upload_id: uuid.UUID,
+    item_id: uuid.UUID,
+    payload: ItemActivationUpdate,
+    current_tutor: Tutor = Depends(get_current_tutor),
+    db: Session = Depends(get_db),
+):
+    """
+    Tutor-only: activate/deactivate an item belonging to an upload.
+    """
+    upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    if upload.tutor_id != current_tutor.id:
+        raise HTTPException(status_code=403, detail="Upload not owned by tutor")
+
+    item = db.query(Item).filter(Item.id == item_id).first()
+    if not item or item.content_upload_id != upload_id:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item.is_active = payload.is_active
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
