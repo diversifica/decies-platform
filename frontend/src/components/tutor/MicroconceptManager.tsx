@@ -143,8 +143,10 @@ export default function MicroconceptManager({ subjectId, termId }: MicroconceptM
             const currentIds = new Set(current.map((e) => e.prerequisite_microconcept_id));
             const desiredIds = new Set(prereqSelection);
 
-            const toAdd = [...desiredIds].filter((id) => !currentIds.has(id));
-            const toRemove = [...currentIds].filter((id) => !desiredIds.has(id));
+            const toAdd = prereqSelection.filter((id) => !currentIds.has(id));
+            const toRemove = current
+                .filter((edge) => !desiredIds.has(edge.prerequisite_microconcept_id))
+                .map((edge) => edge.prerequisite_microconcept_id);
 
             if (toAdd.length > 0) {
                 await Promise.all(toAdd.map((id) => addMicroconceptPrerequisite(prereqOpenId, id)));
