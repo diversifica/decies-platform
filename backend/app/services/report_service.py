@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.activity import ActivitySession, ActivityType
@@ -132,6 +133,64 @@ class ReportService:
             .order_by(RecommendationInstance.priority, RecommendationInstance.generated_at.desc())
             .all()
         )
+
+        accepted_recommendations = (
+            db.query(RecommendationInstance)
+            .outerjoin(MicroConcept, RecommendationInstance.microconcept_id == MicroConcept.id)
+            .options(selectinload(RecommendationInstance.outcome))
+            .filter(
+                RecommendationInstance.student_id == student_id,
+                RecommendationInstance.status == RecommendationStatus.ACCEPTED,
+                or_(
+                    RecommendationInstance.microconcept_id.is_(None),
+                    and_(MicroConcept.subject_id == subject_id, MicroConcept.term_id == term_id),
+                ),
+            )
+            .order_by(RecommendationInstance.updated_at.desc())
+            .limit(20)
+            .all()
+        )
+
+        accepted_payload: list[dict[str, Any]] = []
+        with_outcome = 0
+        success_true = 0
+        success_false = 0
+        success_partial = 0
+
+        for rec in accepted_recommendations:
+            outcome_payload = None
+            if rec.outcome:
+                with_outcome += 1
+                normalized = (rec.outcome.success or "").lower()
+                if normalized == "true":
+                    success_true += 1
+                elif normalized == "false":
+                    success_false += 1
+                else:
+                    success_partial += 1
+
+                outcome_payload = {
+                    "id": str(rec.outcome.id),
+                    "recommendation_id": str(rec.outcome.recommendation_id),
+                    "evaluation_start": rec.outcome.evaluation_start.isoformat(),
+                    "evaluation_end": rec.outcome.evaluation_end.isoformat(),
+                    "success": rec.outcome.success,
+                    "delta_mastery": _to_float(rec.outcome.delta_mastery),
+                    "delta_accuracy": _to_float(rec.outcome.delta_accuracy),
+                    "delta_hint_rate": _to_float(rec.outcome.delta_hint_rate),
+                    "computed_at": rec.outcome.computed_at.isoformat(),
+                    "notes": rec.outcome.notes,
+                }
+
+            accepted_payload.append(
+                {
+                    "id": str(rec.id),
+                    "title": rec.title,
+                    "description": rec.description,
+                    "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
+                    "outcome": outcome_payload,
+                }
+            )
 
         feedback_sessions = (
             db.query(ActivitySession, ActivityType)
@@ -390,6 +449,33 @@ class ReportService:
                 id=uuid.uuid4(),
                 report_id=report.id,
                 order_index=4,
+                section_type="recommendation_outcomes",
+                title="Impacto de recomendaciones",
+                content=(
+                    "No hay recomendaciones aceptadas aún."
+                    if not accepted_payload
+                    else (
+                        "Hay recomendaciones aceptadas, pero aún no hay impacto calculado. "
+                        "En la pestaña de Recomendaciones, pulsa “Actualizar impacto”."
+                        if with_outcome == 0
+                        else "Impacto estimado (Δ) en métricas dentro de la ventana de evaluación."
+                    )
+                ),
+                data={
+                    "accepted": accepted_payload,
+                    "stats": {
+                        "total_accepted": len(accepted_payload),
+                        "with_outcome": with_outcome,
+                        "success_true": success_true,
+                        "success_false": success_false,
+                        "success_partial": success_partial,
+                    },
+                },
+            ),
+            TutorReportSection(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                order_index=5,
                 section_type="student_feedback",
                 title="Feedback del alumno",
                 content=(

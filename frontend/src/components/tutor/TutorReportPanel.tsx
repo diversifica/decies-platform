@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 
 interface TutorReportSection {
@@ -37,7 +37,7 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchLatest = async () => {
+    const fetchLatest = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
@@ -54,9 +54,9 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
         } finally {
             setLoading(false);
         }
-    };
+    }, [studentId, subjectId, termId, tutorId]);
 
-    const generate = async () => {
+    const generate = useCallback(async () => {
         setGenerating(true);
         setError(null);
         try {
@@ -69,12 +69,30 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
         } finally {
             setGenerating(false);
         }
-    };
+    }, [studentId, subjectId, termId, tutorId]);
+
+    const formatDelta = useCallback((value: number | null | undefined, unit: 'pp' | 'score') => {
+        if (value == null || Number.isNaN(value)) return 'N/A';
+        const sign = value > 0 ? '+' : '';
+        if (unit === 'pp') return `${sign}${(value * 100).toFixed(1)}pp`;
+        return `${sign}${value.toFixed(3)}`;
+    }, []);
+
+    const outcomeBadge = useCallback((success: string | null | undefined) => {
+        const normalized = (success || '').toLowerCase();
+        if (!normalized) return { label: 'Pendiente', color: 'var(--text-secondary)' };
+        if (normalized === 'true') return { label: 'Éxito', color: 'var(--success)' };
+        if (normalized === 'false') return { label: 'Sin efecto', color: 'var(--error)' };
+        return { label: 'Parcial', color: 'var(--warning)' };
+    }, []);
 
     useEffect(() => {
         fetchLatest();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tutorId, studentId, subjectId, termId]);
+    }, [fetchLatest]);
+
+    const sortedSections = useMemo(() => {
+        return report?.sections?.slice().sort((a, b) => a.order_index - b.order_index) || [];
+    }, [report?.sections]);
 
     if (loading) return <p>Cargando informe...</p>;
 
@@ -110,10 +128,7 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
                         <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{report.summary}</pre>
                     </div>
 
-                    {report.sections
-                        .slice()
-                        .sort((a, b) => a.order_index - b.order_index)
-                        .map((section) => (
+                    {sortedSections.map((section) => (
                             <div
                                 key={section.id}
                                 style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '1rem' }}
@@ -152,6 +167,70 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
                                                                 </td>
                                                             </tr>
                                                         ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : section.section_type === 'recommendation_outcomes' && Array.isArray(section.data?.accepted) ? (
+                                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                        {section.data?.stats && (
+                                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                                Aceptadas: {section.data?.stats?.total_accepted ?? 0}
+                                                {' · '}
+                                                Con impacto: {section.data?.stats?.with_outcome ?? 0}
+                                                {' · '}
+                                                Éxito: {section.data?.stats?.success_true ?? 0}
+                                                {' · '}
+                                                Parcial: {section.data?.stats?.success_partial ?? 0}
+                                                {' · '}
+                                                Sin efecto: {section.data?.stats?.success_false ?? 0}
+                                            </p>
+                                        )}
+
+                                        {section.data.accepted.length === 0 ? (
+                                            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{section.content}</p>
+                                        ) : (
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                                            <th style={{ padding: '0.5rem' }}>Recomendación</th>
+                                                            <th style={{ padding: '0.5rem' }}>Impacto</th>
+                                                            <th style={{ padding: '0.5rem' }}>Δ Accuracy</th>
+                                                            <th style={{ padding: '0.5rem' }}>Δ Mastery</th>
+                                                            <th style={{ padding: '0.5rem' }}>Δ Hint</th>
+                                                            <th style={{ padding: '0.5rem' }}>Ventana</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {section.data.accepted.map((entry: any) => {
+                                                            const badge = outcomeBadge(entry?.outcome?.success);
+                                                            return (
+                                                                <tr key={entry.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                                                                    <td style={{ padding: '0.5rem' }}>{entry.title}</td>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        <span className="badge" style={{ backgroundColor: badge.color }}>
+                                                                            {badge.label}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        {formatDelta(entry?.outcome?.delta_accuracy, 'pp')}
+                                                                    </td>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        {formatDelta(entry?.outcome?.delta_mastery, 'score')}
+                                                                    </td>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        {formatDelta(entry?.outcome?.delta_hint_rate, 'pp')}
+                                                                    </td>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        {entry?.outcome?.evaluation_start && entry?.outcome?.evaluation_end
+                                                                            ? `${new Date(entry.outcome.evaluation_start).toLocaleDateString()} – ${new Date(entry.outcome.evaluation_end).toLocaleDateString()}`
+                                                                            : '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
                                             </div>
