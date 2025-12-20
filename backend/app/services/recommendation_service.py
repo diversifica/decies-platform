@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.models.activity import ActivitySession
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import (
@@ -35,6 +36,7 @@ class RecommendationService:
         """
 
         generated_recs: list[RecommendationInstance] = []
+        now = datetime.utcnow()
 
         # 1. Get Context Data
         # Latest metrics
@@ -59,6 +61,12 @@ class RecommendationService:
             .all()
         )
         mastery_by_microconcept_id = {ms.microconcept_id: ms for ms in mastery_states}
+
+        microconcept_name_by_id: dict[uuid.UUID, str] = {}
+        microconcept_ids = list(mastery_by_microconcept_id.keys())
+        if microconcept_ids:
+            for mc in db.query(MicroConcept).filter(MicroConcept.id.in_(microconcept_ids)).all():
+                microconcept_name_by_id[mc.id] = mc.name
 
         # 2. Rule R01: General Low Accuracy (Scope: Subject)
         # Condition: accuracy < 0.5
@@ -92,13 +100,326 @@ class RecommendationService:
             if rec:
                 generated_recs.append(rec)
 
+        # Focus rules (R02-R04, R06-R10)
+
+        # Rule R02: Consolidate in-progress microconcepts.
+        for state in mastery_states:
+            if state.status != "in_progress":
+                continue
+            if state.last_practice_at is None:
+                continue
+            mastery_score = float(state.mastery_score)
+            if not (0.4 <= mastery_score < 0.8):
+                continue
+
+            mc_name = microconcept_name_by_id.get(state.microconcept_id, "Microconcepto")
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R02",
+                title=f"Consolidar: {mc_name}",
+                description=(
+                    "Aumentar práctica dirigida para consolidar microconceptos en progreso "
+                    "y estabilizar el dominio."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                microconcept_id=state.microconcept_id,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="status",
+                        value=state.status,
+                        description="Microconcepto en progreso",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="mastery_score",
+                        value=str(state.mastery_score),
+                        description="Dominio medio (consolidación recomendada)",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R03: Spaced review of dominant microconcepts due for review.
+        due_dominant = [
+            state
+            for state in mastery_states
+            if state.status == "dominant"
+            and state.recommended_next_review_at is not None
+            and state.recommended_next_review_at <= now
+        ]
+        if due_dominant:
+            due_dominant.sort(key=lambda s: s.recommended_next_review_at or now)
+            due_count = len(due_dominant)
+            evidence: list[RecommendationEvidenceCreate] = [
+                RecommendationEvidenceCreate(
+                    evidence_type="metric_value",
+                    key="due_review_count",
+                    value=str(due_count),
+                    description="Microconceptos dominados con repaso vencido",
+                )
+            ]
+            for state in due_dominant[:5]:
+                evidence.append(
+                    RecommendationEvidenceCreate(
+                        evidence_type="microconcept",
+                        key="microconcept_id",
+                        value=str(state.microconcept_id),
+                        description=microconcept_name_by_id.get(
+                            state.microconcept_id, "Microconcepto"
+                        ),
+                    )
+                )
+
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R03",
+                title="Repaso espaciado de microconceptos dominados",
+                description=(
+                    f"Hay {due_count} microconcepto(s) dominado(s) con repaso vencido. "
+                    "Recomienda una sesión de repaso espaciado (modo Revisión)."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=evidence,
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        dominant_count = sum(1 for ms in mastery_states if ms.status == "dominant")
+        in_progress_count = sum(1 for ms in mastery_states if ms.status == "in_progress")
+        at_risk_count = sum(1 for ms in mastery_states if ms.status == "at_risk")
+
+        # Rule R04: Reduce load of new concepts when many are at risk.
+        if at_risk_count >= 3:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R04",
+                title="Reducir carga de nuevos conceptos",
+                description=(
+                    "Hay muchos microconceptos en riesgo. Conviene reducir la introducción "
+                    "de contenido nuevo y priorizar consolidación/repaso."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="at_risk_count",
+                        value=str(at_risk_count),
+                        description="Número de microconceptos en riesgo",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="in_progress_count",
+                        value=str(in_progress_count),
+                        description="Número de microconceptos en progreso",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="dominant_count",
+                        value=str(dominant_count),
+                        description="Número de microconceptos dominados",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R06: Reorder the term plan if prerequisite readiness is misaligned.
+        prereq_edges = (
+            db.query(MicroConceptPrerequisite)
+            .join(MicroConcept, MicroConceptPrerequisite.microconcept_id == MicroConcept.id)
+            .filter(MicroConcept.subject_id == subject_id, MicroConcept.term_id == term_id)
+            .all()
+        )
+        prereq_misalignment = 0
+        for edge in prereq_edges:
+            child = mastery_by_microconcept_id.get(edge.microconcept_id)
+            prereq = mastery_by_microconcept_id.get(edge.prerequisite_microconcept_id)
+            if not child or not prereq:
+                continue
+            if child.status in ("at_risk", "in_progress") and prereq.status != "dominant":
+                prereq_misalignment += 1
+
+        if prereq_misalignment >= 2:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R06",
+                title="Reorganizar orden del trimestre",
+                description=(
+                    "Se detectan varios microconceptos con prerequisitos aún no dominados. "
+                    "Conviene reorganizar el orden para asegurar base antes de avanzar."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="prerequisite",
+                        key="misaligned_prerequisites",
+                        value=str(prereq_misalignment),
+                        description="Relaciones prerequisito con dominio insuficiente",
+                    )
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R07: Immediate repetition after errors for very low mastery at-risk microconcepts.
+        for state in mastery_states:
+            if state.status != "at_risk":
+                continue
+            if state.last_practice_at is None:
+                continue
+            if float(state.mastery_score) >= 0.3:
+                continue
+
+            mc_name = microconcept_name_by_id.get(state.microconcept_id, "Microconcepto")
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R07",
+                title=f"Repetición inmediata: {mc_name}",
+                description=(
+                    "Se recomienda repetición inmediata tras errores para corregir el patrón "
+                    "antes de seguir avanzando."
+                ),
+                priority=RecommendationPriority.HIGH,
+                microconcept_id=state.microconcept_id,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="status",
+                        value=state.status,
+                        description="Microconcepto en riesgo",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="mastery_score",
+                        value=str(state.mastery_score),
+                        description="Dominio muy bajo (repetición inmediata recomendada)",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R08: Frequent micro-evaluations when activity is low and risk is present.
+        week_ago = now - timedelta(days=7)
+        recent_sessions = (
+            db.query(ActivitySession)
+            .filter(
+                ActivitySession.student_id == student_id,
+                ActivitySession.subject_id == subject_id,
+                ActivitySession.term_id == term_id,
+                ActivitySession.started_at >= week_ago,
+            )
+            .count()
+        )
+        has_risk_signal = at_risk_count > 0 or (
+            metrics is not None and metrics.accuracy is not None and float(metrics.accuracy) < 0.6
+        )
+        if recent_sessions < 3 and has_risk_signal:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R08",
+                title="Introducir microevaluaciones frecuentes",
+                description=(
+                    "La actividad reciente es baja y hay señales de riesgo. "
+                    "Recomienda sesiones cortas y frecuentes para detectar y corregir fallos "
+                    "pronto."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="recent_sessions_7d",
+                        value=str(recent_sessions),
+                        description="Sesiones registradas en los últimos 7 días",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="at_risk_count",
+                        value=str(at_risk_count),
+                        description="Número de microconceptos en riesgo",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R09: Separate confused concepts (high attempts per item suggests confusion).
+        if (
+            metrics is not None
+            and metrics.attempts_per_item_avg is not None
+            and float(metrics.attempts_per_item_avg) > 2.5
+        ):
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R09",
+                title="Separar conceptos confundidos",
+                description=(
+                    "Se observa un número alto de intentos por ítem, lo que puede indicar "
+                    "confusión entre conceptos. Conviene practicar de forma más diferenciada "
+                    "y con ejemplos contrastivos."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="attempts_per_item_avg",
+                        value=str(metrics.attempts_per_item_avg),
+                        description="Intentos por ítem elevados",
+                    )
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R10: Simplify difficulty temporarily when global accuracy is very low.
+        if metrics is not None and metrics.accuracy is not None and float(metrics.accuracy) < 0.4:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R10",
+                title="Simplificar dificultad temporalmente",
+                description=(
+                    "El rendimiento global es bajo. Conviene reducir temporalmente la dificultad "
+                    "para recuperar confianza y estabilizar el aprendizaje."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(metrics.accuracy),
+                        description="Precisión global baja",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="at_risk_count",
+                        value=str(at_risk_count),
+                        description="Microconceptos en riesgo",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
         # 3. Rule R11: Specific MicroConcept At Risk
         # Condition: status == 'at_risk' or mastery_score < 0.5
         for state in mastery_states:
             if state.status == "at_risk" or state.mastery_score < 0.5:
                 # Get microconcept name
-                mc = db.get(MicroConcept, state.microconcept_id)
-                mc_name = mc.name if mc else "Unknown Concept"
+                mc_name = microconcept_name_by_id.get(state.microconcept_id, "Unknown Concept")
+                if mc_name == "Unknown Concept":
+                    mc = db.get(MicroConcept, state.microconcept_id)
+                    if mc:
+                        mc_name = mc.name
 
                 rec = self._create_or_get_recommendation(
                     db,

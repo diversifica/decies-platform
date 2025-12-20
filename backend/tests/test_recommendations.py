@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -290,6 +290,89 @@ def test_generate_recommendations_prerequisites_r05_requires_practice(db_session
         db_session, student.id, subject.id, term.id
     )
     assert all(r.rule_id != "R05" for r in recs)
+
+
+def test_generate_recommendations_r02_in_progress_consolidate(db_session, context):
+    """Test R02: in-progress practiced microconcept generates consolidation recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Concept In Progress", description="..."
+    )
+    db_session.add(mc)
+    db_session.flush()
+
+    now = datetime.utcnow()
+    db_session.add(
+        MasteryState(
+            student_id=student.id,
+            microconcept_id=mc.id,
+            mastery_score=0.6,
+            status="in_progress",
+            last_practice_at=now,
+            recommended_next_review_at=now + timedelta(days=7),
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r02 = next((r for r in recs if r.rule_id == "R02"), None)
+    assert r02 is not None
+    assert r02.microconcept_id == mc.id
+    assert any(ev.key == "mastery_score" for ev in r02.evidence)
+
+
+def test_generate_recommendations_r03_spaced_review_due(db_session, context):
+    """Test R03: dominant microconcept with due review generates a spaced review recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Concept Dominant", description="..."
+    )
+    db_session.add(mc)
+    db_session.flush()
+
+    now = datetime.utcnow()
+    db_session.add(
+        MasteryState(
+            student_id=student.id,
+            microconcept_id=mc.id,
+            mastery_score=0.95,
+            status="dominant",
+            last_practice_at=now - timedelta(days=30),
+            recommended_next_review_at=now - timedelta(days=1),
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    recs1 = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r03 = next((r for r in recs1 if r.rule_id == "R03"), None)
+    assert r03 is not None
+    assert r03.microconcept_id is None
+    assert any(ev.key == "due_review_count" for ev in r03.evidence)
+
+    recs2 = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    assert any(r.rule_id == "R03" for r in recs2)
+    pending = (
+        db_session.query(RecommendationInstance)
+        .filter(
+            RecommendationInstance.student_id == student.id, RecommendationInstance.rule_id == "R03"
+        )
+        .all()
+    )
+    assert len(pending) == 1
 
 
 def test_tutor_decision(db_session, context):
