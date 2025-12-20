@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
 from app.core.db import SessionLocal
 from app.models.activity import ActivitySession, ActivityType
+from app.models.grade import AssessmentScopeTag, RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
@@ -693,6 +694,80 @@ def test_generate_recommendations_r30_alternate_intensive_light_days(db_session,
     r30 = next((r for r in recs if r.rule_id == "R30"), None)
     assert r30 is not None
     assert any(ev.key == "days_with_sessions_7d" for ev in r30.evidence)
+
+
+def test_generate_recommendations_r33_request_tagging_when_unscoped_low_grade(db_session, context):
+    """Test R33: low real grade with no scope tags requests tutor tagging."""
+    student = context["student"]
+    tutor = context["tutor"]
+    subject = context["subject"]
+    term = context["term"]
+
+    grade = RealGrade(
+        student_id=student.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        assessment_date=date.today(),
+        grade_value=4.0,
+        grading_scale="0-10",
+        created_by_tutor_id=tutor.id,
+    )
+    db_session.add(grade)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+
+    r33 = next((r for r in recs if r.rule_id == "R33"), None)
+    assert r33 is not None
+    assert any(ev.key == "real_grade_id" for ev in r33.evidence)
+    assert any(ev.key == "scope_tags_count" for ev in r33.evidence)
+
+
+def test_generate_recommendations_r35_prioritize_key_exam_microconcept(db_session, context):
+    """Test R35: high-weight grade scope tag + weak mastery creates microconcept rec."""
+    student = context["student"]
+    tutor = context["tutor"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc = MicroConcept(subject_id=subject.id, term_id=term.id, name="Concepto clave", description="")
+    db_session.add(mc)
+    db_session.flush()
+
+    db_session.add(
+        MasteryState(
+            student_id=student.id,
+            microconcept_id=mc.id,
+            mastery_score=0.4,
+            status="at_risk",
+            updated_at=datetime.now(),
+        )
+    )
+
+    grade = RealGrade(
+        student_id=student.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        assessment_date=date.today(),
+        grade_value=5.0,
+        grading_scale="0-10",
+        created_by_tutor_id=tutor.id,
+        scope_tags=[AssessmentScopeTag(microconcept_id=mc.id, weight=0.8)],
+    )
+    db_session.add(grade)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+
+    r35 = next((r for r in recs if r.rule_id == "R35" and r.microconcept_id == mc.id), None)
+    assert r35 is not None
+    assert r35.priority == "high"
+    assert any(ev.key == "real_grade_id" for ev in r35.evidence)
+    assert any(ev.key == "tag_weight" for ev in r35.evidence)
 
 
 def test_tutor_decision(db_session, context):

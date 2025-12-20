@@ -3,9 +3,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.activity import ActivitySession, ActivityType, LearningEvent
+from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import (
@@ -23,6 +24,33 @@ from app.schemas.recommendation import (
 
 class RecommendationService:
     """Service for generating and managing study recommendations"""
+
+    @staticmethod
+    def _normalize_grade(*, grade_value: float | None, grading_scale: str | None) -> float | None:
+        if grade_value is None:
+            return None
+
+        value = float(grade_value)
+        max_value: float | None = None
+
+        scale = (grading_scale or "").strip()
+        if "-" in scale:
+            parts = [p.strip() for p in scale.split("-", 1)]
+            try:
+                max_value = float(parts[1])
+            except ValueError:
+                max_value = None
+
+        if max_value is None:
+            if value <= 10:
+                max_value = 10.0
+            elif value <= 100:
+                max_value = 100.0
+
+        if not max_value or max_value <= 0:
+            return None
+
+        return max(0.0, min(1.0, value / max_value))
 
     def generate_recommendations(
         self,
@@ -941,6 +969,460 @@ class RecommendationService:
             )
             if rec:
                 generated_recs.append(rec)
+
+        # External validation rules (R31-R40): real grades vs system signals.
+        external_validation_fired = False
+        grades = (
+            db.query(RealGrade)
+            .options(selectinload(RealGrade.scope_tags))
+            .filter(
+                RealGrade.student_id == student_id,
+                RealGrade.subject_id == subject_id,
+                RealGrade.term_id == term_id,
+            )
+            .order_by(RealGrade.assessment_date.desc(), RealGrade.created_at.desc().nullslast())
+            .limit(5)
+            .all()
+        )
+        latest_grade = grades[0] if grades else None
+        prev_grade = grades[1] if len(grades) > 1 else None
+
+        latest_grade_norm = (
+            self._normalize_grade(
+                grade_value=float(latest_grade.grade_value) if latest_grade else None,
+                grading_scale=latest_grade.grading_scale if latest_grade else None,
+            )
+            if latest_grade
+            else None
+        )
+
+        mastery_avg_subject = (
+            (sum(float(ms.mastery_score) for ms in mastery_states) / len(mastery_states))
+            if mastery_states
+            else None
+        )
+
+        weighted_mastery = 0.0
+        weighted_total = 0.0
+        tag_microconcept_ids: list[uuid.UUID] = []
+        if latest_grade and latest_grade.scope_tags:
+            for tag in latest_grade.scope_tags:
+                if tag.microconcept_id:
+                    tag_microconcept_ids.append(tag.microconcept_id)
+                    ms = mastery_by_microconcept_id.get(tag.microconcept_id)
+                    if not ms:
+                        continue
+                    weight = float(tag.weight) if tag.weight is not None else 1.0
+                    weighted_mastery += float(ms.mastery_score) * weight
+                    weighted_total += weight
+        mastery_avg_grade_scope = (weighted_mastery / weighted_total) if weighted_total else None
+
+        # Helper: always attach grade reference evidence when emitting external_validation recs.
+        def _grade_evidence(grade: RealGrade) -> list[RecommendationEvidenceCreate]:
+            return [
+                RecommendationEvidenceCreate(
+                    evidence_type="real_grade",
+                    key="real_grade_id",
+                    value=str(grade.id),
+                    description="Referencia a calificación real",
+                ),
+                RecommendationEvidenceCreate(
+                    evidence_type="real_grade",
+                    key="assessment_date",
+                    value=grade.assessment_date.isoformat(),
+                    description="Fecha de evaluación",
+                ),
+                RecommendationEvidenceCreate(
+                    evidence_type="real_grade",
+                    key="grade_value",
+                    value=str(grade.grade_value),
+                    description="Valor de calificación",
+                ),
+                RecommendationEvidenceCreate(
+                    evidence_type="real_grade",
+                    key="grading_scale",
+                    value=str(grade.grading_scale or ""),
+                    description="Escala de calificación",
+                ),
+            ]
+
+        if latest_grade and latest_grade_norm is not None:
+            # R33: request tagging/context if scope is ambiguous and grade isn't excellent.
+            if (
+                not latest_grade.scope_tags or not tag_microconcept_ids
+            ) and latest_grade_norm < 0.8:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R33",
+                    title="Etiquetado por tutor",
+                    description=(
+                        "Hay una calificación real registrada, pero no está etiquetada por "
+                        "topic/microconcepto. Etiquetar el alcance ayuda a "
+                        "interpretar discrepancias y ajustar la práctica."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="scope_tags_count",
+                            value=str(len(latest_grade.scope_tags or [])),
+                            description="Número de etiquetas de alcance",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+                    external_validation_fired = True
+
+            effective_mastery = mastery_avg_grade_scope or mastery_avg_subject
+
+            # R31: exam-style practice when grade is low but mastery seems ok.
+            if (
+                effective_mastery is not None
+                and latest_grade_norm < 0.6
+                and effective_mastery >= 0.75
+            ):
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R31",
+                    title="Ejercicios tipo examen",
+                    description=(
+                        "La calificación real es baja pese a señales de "
+                        "dominio/precisión aceptables. Conviene introducir ejercicios tipo examen "
+                        "para mejorar rendimiento en evaluación real."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="mastery_avg_scope",
+                            value=str(effective_mastery),
+                            description="Dominio medio en el alcance evaluado",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+                    external_validation_fired = True
+
+            # R35: prioritize key concepts (high weight tags) with low mastery.
+            if latest_grade.scope_tags and tag_microconcept_ids:
+                key_tags = [
+                    t
+                    for t in latest_grade.scope_tags
+                    if (
+                        t.microconcept_id
+                        and (float(t.weight) if t.weight is not None else 0.0) >= 0.5
+                    )
+                ]
+                weak_key_tags: list[tuple[float, uuid.UUID, float]] = []
+                for t in key_tags:
+                    ms = mastery_by_microconcept_id.get(t.microconcept_id)
+                    if not ms:
+                        continue
+                    score = float(ms.mastery_score)
+                    if score < 0.6 or ms.status != "dominant":
+                        w = float(t.weight) if t.weight is not None else 1.0
+                        weak_key_tags.append((score, t.microconcept_id, w))
+
+                weak_key_tags.sort(key=lambda x: x[0])
+                for score, mcid, weight in weak_key_tags[:3]:
+                    mc_name = microconcept_name_by_id.get(mcid, "Microconcepto")
+                    rec = self._create_or_get_recommendation(
+                        db,
+                        student_id=student_id,
+                        rule_id="R35",
+                        title=f"Priorizar conceptos clave del examen: {mc_name}",
+                        description=(
+                            "La calificación real indica que este microconcepto es clave "
+                            "(alto peso). "
+                            "El dominio actual no es suficiente. "
+                            "Conviene priorizar práctica dirigida."
+                        ),
+                        priority=RecommendationPriority.HIGH,
+                        microconcept_id=mcid,
+                        evidence=_grade_evidence(latest_grade)
+                        + [
+                            RecommendationEvidenceCreate(
+                                evidence_type="summary",
+                                key="tag_weight",
+                                value=str(weight),
+                                description="Peso del microconcepto en la evaluación",
+                            ),
+                            RecommendationEvidenceCreate(
+                                evidence_type="mastery_state",
+                                key="mastery_score",
+                                value=str(score),
+                                description="Dominio actual del microconcepto",
+                            ),
+                        ],
+                    )
+                    if rec:
+                        generated_recs.append(rec)
+                        external_validation_fired = True
+
+            # R36: false mastery / overconfidence if mastery is very high but grade is very low.
+            if (
+                effective_mastery is not None
+                and latest_grade_norm <= 0.5
+                and effective_mastery >= 0.85
+            ):
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R36",
+                    title="Reducir confianza excesiva",
+                    description=(
+                        "La calificación real contradice un dominio alto. "
+                        "Conviene revisar supuestos y ajustar el diagnóstico "
+                        "para evitar falso dominio."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="mastery_avg_scope",
+                            value=str(effective_mastery),
+                            description="Dominio medio en el alcance evaluado",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+                    external_validation_fired = True
+
+            # R32: syllabus alignment if grade is low and there's little practice data.
+            events_30d = (
+                db.query(LearningEvent.id)
+                .filter(
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.subject_id == subject_id,
+                    LearningEvent.term_id == term_id,
+                    LearningEvent.timestamp_start >= (now - timedelta(days=30)),
+                )
+                .count()
+            )
+            if latest_grade_norm < 0.6 and events_30d < 20:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R32",
+                    title="Revisar alineación temario",
+                    description=(
+                        "La calificación real es baja y hay poca evidencia de práctica/coverage. "
+                        "Conviene revisar si los ítems cubren el temario real evaluado."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="events_30d",
+                            value=str(events_30d),
+                            description="Eventos en últimos 30 días",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+                    external_validation_fired = True
+
+            # R34: reinforce transfer when system performance is very high but grade is low.
+            if latest_grade_norm < 0.6 and accuracy is not None and accuracy >= 0.8:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R34",
+                    title="Reforzar transferencia",
+                    description=(
+                        "El desempeño en la plataforma es alto pero la calificación real es baja. "
+                        "Conviene reforzar transferencia con variación de formatos y contexto."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión global alta",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+                    external_validation_fired = True
+
+            # R37: review session consistency when per-session accuracy varies a lot.
+            session_rows = (
+                db.query(ActivitySession.id)
+                .filter(
+                    ActivitySession.student_id == student_id,
+                    ActivitySession.subject_id == subject_id,
+                    ActivitySession.term_id == term_id,
+                    ActivitySession.started_at >= (now - timedelta(days=30)),
+                )
+                .order_by(ActivitySession.started_at.desc())
+                .limit(10)
+                .all()
+            )
+            session_ids = [row[0] for row in session_rows]
+            per_session_acc: list[float] = []
+            if session_ids:
+                events = (
+                    db.query(LearningEvent.session_id, LearningEvent.is_correct)
+                    .filter(LearningEvent.session_id.in_(session_ids))
+                    .all()
+                )
+                by_session: dict[uuid.UUID, list[bool]] = {}
+                for sid, is_correct in events:
+                    by_session.setdefault(sid, []).append(bool(is_correct))
+                for sid, values in by_session.items():
+                    if len(values) < 3:
+                        continue
+                    per_session_acc.append(sum(1 for v in values if v) / len(values))
+
+            if len(per_session_acc) >= 5:
+                mean = sum(per_session_acc) / len(per_session_acc)
+                variance = sum((x - mean) ** 2 for x in per_session_acc) / len(per_session_acc)
+                std = variance**0.5
+                if std >= 0.25:
+                    rec = self._create_or_get_recommendation(
+                        db,
+                        student_id=student_id,
+                        rule_id="R37",
+                        title="Revisar consistencia entre sesiones",
+                        description=(
+                            "Hay variabilidad alta entre sesiones. Conviene revisar consistencia "
+                            "para evitar diagnósticos erróneos."
+                        ),
+                        priority=RecommendationPriority.LOW,
+                        evidence=_grade_evidence(latest_grade)
+                        + [
+                            RecommendationEvidenceCreate(
+                                evidence_type="summary",
+                                key="session_accuracy_std",
+                                value=f"{std:.3f}",
+                                description="Desviación de accuracy por sesión (últimas sesiones)",
+                            ),
+                            RecommendationEvidenceCreate(
+                                evidence_type="summary",
+                                key="session_count",
+                                value=str(len(per_session_acc)),
+                                description="Sesiones consideradas",
+                            ),
+                        ],
+                    )
+                    if rec:
+                        generated_recs.append(rec)
+                        external_validation_fired = True
+
+            # R38/R40 depend on repeated grades.
+            if prev_grade:
+                prev_norm = self._normalize_grade(
+                    grade_value=float(prev_grade.grade_value),
+                    grading_scale=prev_grade.grading_scale,
+                )
+
+                if prev_norm is not None and prev_norm < 0.6 and latest_grade_norm < 0.6:
+                    rec = self._create_or_get_recommendation(
+                        db,
+                        student_id=student_id,
+                        rule_id="R38",
+                        title="Activar revisión tutor–alumno",
+                        description=(
+                            "Hay discrepancias persistentes en calificaciones reales. "
+                            "Conviene una revisión conjunta tutor–alumno para alinear objetivos "
+                            "y práctica."
+                        ),
+                        priority=RecommendationPriority.MEDIUM,
+                        evidence=_grade_evidence(latest_grade)
+                        + [
+                            RecommendationEvidenceCreate(
+                                evidence_type="real_grade",
+                                key="previous_real_grade_id",
+                                value=str(prev_grade.id),
+                                description="Calificación real previa",
+                            )
+                        ],
+                    )
+                    if rec:
+                        generated_recs.append(rec)
+                        external_validation_fired = True
+
+                if (
+                    prev_norm is not None
+                    and prev_norm <= 0.5
+                    and latest_grade_norm <= 0.5
+                    and accuracy is not None
+                    and accuracy < 0.6
+                    and at_risk_count >= 2
+                ):
+                    rec = self._create_or_get_recommendation(
+                        db,
+                        student_id=student_id,
+                        rule_id="R40",
+                        title="Reevaluar tras no mejora",
+                        description=(
+                            "No hay mejora en calificaciones reales y el rendimiento del sistema "
+                            "sigue bajo. Conviene reevaluar la estrategia y ajustar el plan."
+                        ),
+                        priority=RecommendationPriority.HIGH,
+                        evidence=_grade_evidence(latest_grade)
+                        + [
+                            RecommendationEvidenceCreate(
+                                evidence_type="real_grade",
+                                key="previous_real_grade_id",
+                                value=str(prev_grade.id),
+                                description="Calificación real previa",
+                            ),
+                            RecommendationEvidenceCreate(
+                                evidence_type="metric_value",
+                                key="accuracy",
+                                value=str(accuracy),
+                                description="Precisión global baja",
+                            ),
+                        ],
+                    )
+                    if rec:
+                        generated_recs.append(rec)
+                        external_validation_fired = True
+
+            # R39: keep strategy when grade and system are strong.
+            if (
+                not external_validation_fired
+                and latest_grade_norm >= 0.8
+                and accuracy is not None
+                and accuracy >= 0.8
+                and at_risk_count == 0
+            ):
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R39",
+                    title="Mantener estrategia actual",
+                    description=(
+                        "La calificación real y el rendimiento en la plataforma son consistentes "
+                        "y altos. Conviene mantener la estrategia actual."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=_grade_evidence(latest_grade)
+                    + [
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión global alta",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
 
         # Dosage rules (R22-R30)
         sessions_7d_start = now - timedelta(days=7)
