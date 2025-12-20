@@ -2,13 +2,15 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.activity import ActivitySession, ActivityType
+from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
 from app.models.report import TutorReport, TutorReportSection
+from app.models.topic import Topic
 from app.services.metric_service import metric_service
 from app.services.recommendation_service import recommendation_service
 
@@ -45,6 +47,20 @@ def _format_feedback_entry(entry: dict[str, Any]) -> str:
     if text:
         return f"- [{activity_code}] {submitted_at} — {rating_label} — {text}"
     return f"- [{activity_code}] {submitted_at} — {rating_label}"
+
+
+def _format_grade_entry(entry: dict[str, Any]) -> str:
+    assessment_date = entry.get("assessment_date") or ""
+    grade_value = entry.get("grade_value")
+    grading_scale = entry.get("grading_scale")
+    notes = (entry.get("notes") or "").strip()
+    tags: list[str] = entry.get("tags") or []
+
+    value_label = f"{grade_value}" if grade_value is not None else "N/A"
+    scale_label = f" ({grading_scale})" if grading_scale else ""
+    tags_label = f" Tags: {', '.join(tags)}" if tags else ""
+    notes_label = f" — {notes}" if notes else ""
+    return f"- {assessment_date}: {value_label}{scale_label}{notes_label}{tags_label}"
 
 
 class ReportService:
@@ -146,6 +162,87 @@ class ReportService:
                 }
             )
 
+        real_grades = (
+            db.query(RealGrade)
+            .options(selectinload(RealGrade.scope_tags))
+            .filter(
+                RealGrade.student_id == student_id,
+                RealGrade.subject_id == subject_id,
+                RealGrade.term_id == term_id,
+                RealGrade.created_by_tutor_id == tutor_id,
+            )
+            .order_by(RealGrade.assessment_date.desc())
+            .limit(5)
+            .all()
+        )
+
+        topic_ids: set[uuid.UUID] = set()
+        microconcept_ids: set[uuid.UUID] = set()
+        for grade in real_grades:
+            for tag in grade.scope_tags:
+                if tag.topic_id:
+                    topic_ids.add(tag.topic_id)
+                if tag.microconcept_id:
+                    microconcept_ids.add(tag.microconcept_id)
+
+        topic_by_id: dict[uuid.UUID, str] = {}
+        if topic_ids:
+            for topic in db.query(Topic).filter(Topic.id.in_(topic_ids)).all():
+                topic_by_id[topic.id] = topic.name
+
+        microconcept_by_id: dict[uuid.UUID, str] = {}
+        if microconcept_ids:
+            for mc in db.query(MicroConcept).filter(MicroConcept.id.in_(microconcept_ids)).all():
+                microconcept_by_id[mc.id] = mc.name
+
+        grade_entries: list[dict[str, Any]] = []
+        grade_values: list[float] = []
+        for grade in real_grades:
+            numeric_grade = _to_float(grade.grade_value)
+            if numeric_grade is not None:
+                grade_values.append(numeric_grade)
+
+            tags: list[str] = []
+            for tag in grade.scope_tags:
+                parts: list[str] = []
+                if tag.topic_id:
+                    parts.append(f"Topic: {topic_by_id.get(tag.topic_id, str(tag.topic_id))}")
+                if tag.microconcept_id:
+                    parts.append(
+                        "Microconcepto: "
+                        f"{microconcept_by_id.get(tag.microconcept_id, str(tag.microconcept_id))}"
+                    )
+                weight = _to_float(tag.weight)
+                if weight is not None:
+                    parts.append(f"peso={weight:g}")
+                if parts:
+                    tags.append(" / ".join(parts))
+
+            grade_entries.append(
+                {
+                    "id": str(grade.id),
+                    "assessment_date": grade.assessment_date.isoformat(),
+                    "grade_value": numeric_grade,
+                    "grading_scale": grade.grading_scale,
+                    "notes": grade.notes,
+                    "tags": tags,
+                }
+            )
+
+        avg_label = "N/A"
+        if grade_values:
+            avg_label = f"{(sum(grade_values) / len(grade_values)):.2f}"
+
+        trend_label = "N/A"
+        if len(grade_values) >= 2:
+            delta = grade_values[0] - grade_values[1]
+            if abs(delta) < 1e-6:
+                trend_label = "estable"
+            elif delta > 0:
+                trend_label = f"mejora (+{delta:.2f})"
+            else:
+                trend_label = f"baja ({delta:.2f})"
+
         at_risk = []
         for ms, mc in mastery_states:
             if ms.status != "at_risk":
@@ -188,6 +285,8 @@ class ReportService:
             executive_lines.append(f"- En riesgo (top): {top_at_risk}")
         if feedback_entries:
             executive_lines.append(f"- Feedback reciente: {len(feedback_entries)} comentario(s)")
+        if grade_entries:
+            executive_lines.append(f"- Calificaciones recientes: {len(grade_entries)}")
 
         metrics_snapshot: dict[str, Any] = {
             "accuracy": accuracy,
@@ -204,6 +303,7 @@ class ReportService:
             },
             "pending_recommendations": len(pending_recommendations),
             "feedback_count": len(feedback_entries),
+            "real_grades_count": len(grade_entries),
         }
 
         report = TutorReport(
@@ -247,6 +347,22 @@ class ReportService:
                 id=uuid.uuid4(),
                 report_id=report.id,
                 order_index=2,
+                section_type="real_grades",
+                title="Calificaciones",
+                content=(
+                    "\n".join([_format_grade_entry(entry) for entry in grade_entries])
+                    if grade_entries
+                    else "No hay calificaciones registradas aún."
+                ),
+                data={
+                    "recent": grade_entries,
+                    "stats": {"trend": trend_label, "average_recent": avg_label},
+                },
+            ),
+            TutorReportSection(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                order_index=3,
                 section_type="recommendations",
                 title="Recomendaciones activas",
                 content="\n".join(
@@ -273,7 +389,7 @@ class ReportService:
             TutorReportSection(
                 id=uuid.uuid4(),
                 report_id=report.id,
-                order_index=3,
+                order_index=4,
                 section_type="student_feedback",
                 title="Feedback del alumno",
                 content=(

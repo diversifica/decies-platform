@@ -119,7 +119,47 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
                                 style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '1rem' }}
                             >
                                 <h4 style={{ marginTop: 0 }}>{section.title}</h4>
-                                <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{section.content}</pre>
+                                {section.section_type === 'real_grades' && Array.isArray(section.data?.recent) ? (
+                                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                        {section.data?.stats && (
+                                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                                Tendencia: {section.data?.stats?.trend || 'N/A'} · Media recientes: {section.data?.stats?.average_recent || 'N/A'}
+                                            </p>
+                                        )}
+                                        {section.data.recent.length === 0 ? (
+                                            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{section.content}</p>
+                                        ) : (
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                                            <th style={{ padding: '0.5rem' }}>Fecha</th>
+                                                            <th style={{ padding: '0.5rem' }}>Nota</th>
+                                                            <th style={{ padding: '0.5rem' }}>Escala</th>
+                                                            <th style={{ padding: '0.5rem' }}>Notas</th>
+                                                            <th style={{ padding: '0.5rem' }}>Tags</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {section.data.recent.map((g: any) => (
+                                                            <tr key={g.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                                                                <td style={{ padding: '0.5rem' }}>{g.assessment_date}</td>
+                                                                <td style={{ padding: '0.5rem' }}>{g.grade_value ?? 'N/A'}</td>
+                                                                <td style={{ padding: '0.5rem' }}>{g.grading_scale || '-'}</td>
+                                                                <td style={{ padding: '0.5rem' }}>{g.notes || '-'}</td>
+                                                                <td style={{ padding: '0.5rem' }}>
+                                                                    {Array.isArray(g.tags) && g.tags.length ? g.tags.join(' | ') : '-'}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{section.content}</pre>
+                                )}
                             </div>
                         ))}
                 </div>
