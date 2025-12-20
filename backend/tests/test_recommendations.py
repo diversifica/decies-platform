@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.db import SessionLocal
+from app.models.activity import ActivitySession, ActivityType
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
@@ -373,6 +374,145 @@ def test_generate_recommendations_r03_spaced_review_due(db_session, context):
         .all()
     )
     assert len(pending) == 1
+
+
+def test_generate_recommendations_r12_limit_hints(db_session, context):
+    """Test R12: high hint rate generates 'limit hints' recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    agg = MetricAggregate(
+        student_id=student.id,
+        scope_type="subject",
+        scope_id=subject.id,
+        accuracy=0.7,
+        first_attempt_accuracy=0.55,
+        median_response_time_ms=8000,
+        attempts_per_item_avg=1.2,
+        hint_rate=0.6,
+        window_start=datetime.now(),
+        window_end=datetime.now(),
+        computed_at=datetime.now(),
+    )
+    db_session.add(agg)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r12 = next((r for r in recs if r.rule_id == "R12"), None)
+    assert r12 is not None
+    assert any(ev.key == "hint_rate" for ev in r12.evidence)
+
+
+def test_generate_recommendations_r16_change_activity_type(db_session, context):
+    """Test R16: repeated quiz sessions trigger a change-activity recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    quiz_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    if not quiz_type:
+        quiz_type = ActivityType(code="QUIZ", name="Quiz", active=True)
+        db_session.add(quiz_type)
+        db_session.flush()
+
+    now = datetime.utcnow()
+    db_session.add_all(
+        [
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=now - timedelta(days=1),
+                ended_at=now - timedelta(days=1) + timedelta(minutes=5),
+                status="completed",
+                device_type="web",
+            ),
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=now - timedelta(days=2),
+                ended_at=now - timedelta(days=2) + timedelta(minutes=5),
+                status="completed",
+                device_type="web",
+            ),
+            ActivitySession(
+                student_id=student.id,
+                activity_type_id=quiz_type.id,
+                subject_id=subject.id,
+                term_id=term.id,
+                topic_id=None,
+                started_at=now - timedelta(days=3),
+                ended_at=now - timedelta(days=3) + timedelta(minutes=5),
+                status="completed",
+                device_type="web",
+            ),
+        ]
+    )
+
+    agg = MetricAggregate(
+        student_id=student.id,
+        scope_type="subject",
+        scope_id=subject.id,
+        accuracy=0.6,
+        first_attempt_accuracy=0.45,
+        median_response_time_ms=25000,
+        attempts_per_item_avg=1.8,
+        hint_rate=0.2,
+        window_start=datetime.now(),
+        window_end=datetime.now(),
+        computed_at=datetime.now(),
+    )
+    db_session.add(agg)
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r16 = next((r for r in recs if r.rule_id == "R16"), None)
+    assert r16 is not None
+    assert any(ev.key == "dominant_activity_type" for ev in r16.evidence)
+
+
+def test_generate_recommendations_r17_examples_for_weak_microconcept(db_session, context):
+    """Test R17: at-risk practiced microconcept generates 'add examples' recommendation."""
+    student = context["student"]
+    subject = context["subject"]
+    term = context["term"]
+
+    mc = MicroConcept(
+        subject_id=subject.id, term_id=term.id, name="Needs Examples", description="..."
+    )
+    db_session.add(mc)
+    db_session.flush()
+
+    now = datetime.utcnow()
+    db_session.add(
+        MasteryState(
+            student_id=student.id,
+            microconcept_id=mc.id,
+            mastery_score=0.25,
+            status="at_risk",
+            last_practice_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    recs = recommendation_service.generate_recommendations(
+        db_session, student.id, subject.id, term.id
+    )
+    r17 = next((r for r in recs if r.rule_id == "R17"), None)
+    assert r17 is not None
+    assert r17.microconcept_id == mc.id
+    assert any(ev.key == "mastery_score" for ev in r17.evidence)
 
 
 def test_tutor_decision(db_session, context):
