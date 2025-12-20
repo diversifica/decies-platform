@@ -1,20 +1,23 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.main import app
 from app.models.activity import ActivitySession, ActivitySessionItem, ActivityType
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item, ItemType
 from app.models.metric import MasteryState
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
+from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
 from app.models.tutor import Tutor
+from app.models.user import User
 
 client = TestClient(app)
 
@@ -275,6 +278,201 @@ def test_list_activity_types(db_session):
     assert len(data) >= 3  # QUIZ, MATCH, REVIEW from seed
     assert any(t["code"] == "QUIZ" for t in data)
     assert any(t["code"] == "EXAM_STYLE" for t in data)
+    assert any(t["code"] == "REVIEW" for t in data)
+
+
+def test_review_session_prioritizes_due_microconcepts(db_session):
+    role_student = db_session.query(Role).filter_by(name="Student").first()
+    if not role_student:
+        role_student = Role(name="Student")
+        db_session.add(role_student)
+
+    role_tutor = db_session.query(Role).filter_by(name="Tutor").first()
+    if not role_tutor:
+        role_tutor = Role(name="Tutor")
+        db_session.add(role_tutor)
+
+    db_session.commit()
+
+    uid = uuid.uuid4()
+    password = "pw"
+
+    tutor_user = User(
+        id=uuid.uuid4(),
+        email=f"t_review_{uid}@example.com",
+        hashed_password=get_password_hash(password),
+        is_active=True,
+        role_id=role_tutor.id,
+    )
+    student_user = User(
+        id=uuid.uuid4(),
+        email=f"s_review_{uid}@example.com",
+        hashed_password=get_password_hash(password),
+        is_active=True,
+        role_id=role_student.id,
+    )
+    db_session.add_all([tutor_user, student_user])
+    db_session.flush()
+
+    tutor = Tutor(user_id=tutor_user.id, display_name="Tutor Review")
+    db_session.add(tutor)
+    db_session.flush()
+
+    term = db_session.query(Term).filter_by(code="T1").first()
+    assert term is not None
+
+    subject = Subject(name=f"Subject Review {uid}", tutor_id=tutor_user.id)
+    db_session.add(subject)
+    db_session.flush()
+
+    student = Student(user_id=student_user.id, subject_id=subject.id)
+    db_session.add(student)
+    db_session.flush()
+
+    review_type = db_session.query(ActivityType).filter_by(code="REVIEW").first()
+    if not review_type:
+        review_type = ActivityType(id=uuid.uuid4(), code="REVIEW", name="Review", active=True)
+        db_session.add(review_type)
+        db_session.flush()
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="review.pdf",
+        storage_uri="/test/review.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    mc_due = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="MC-DUE",
+        name="Due",
+        description="due",
+        active=True,
+    )
+    mc_not_due = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="MC-NOTDUE",
+        name="Not due",
+        description="not due",
+        active=True,
+    )
+    db_session.add_all([mc_due, mc_not_due])
+    db_session.flush()
+
+    due_item_1 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_due.id,
+        type=ItemType.MCQ,
+        stem="Due 1",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    due_item_2 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_due.id,
+        type=ItemType.MCQ,
+        stem="Due 2",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    not_due_item_1 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_not_due.id,
+        type=ItemType.MCQ,
+        stem="NotDue 1",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    not_due_item_2 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_not_due.id,
+        type=ItemType.MCQ,
+        stem="NotDue 2",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add_all([due_item_1, due_item_2, not_due_item_1, not_due_item_2])
+
+    now = datetime.utcnow()
+    due_ms = MasteryState(
+        student_id=student.id,
+        microconcept_id=mc_due.id,
+        mastery_score=0.9,
+        status="dominant",
+        last_practice_at=now - timedelta(days=10),
+        recommended_next_review_at=now - timedelta(days=1),
+        updated_at=now,
+    )
+    not_due_ms = MasteryState(
+        student_id=student.id,
+        microconcept_id=mc_not_due.id,
+        mastery_score=0.1,
+        status="at_risk",
+        last_practice_at=now - timedelta(days=1),
+        recommended_next_review_at=now + timedelta(days=30),
+        updated_at=now,
+    )
+    db_session.add_all([due_ms, not_due_ms])
+    db_session.commit()
+
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": student_user.email, "password": password},
+    )
+    assert token_res.status_code == 200
+    headers = {"Authorization": f"Bearer {token_res.json()['access_token']}"}
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(review_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 3,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = session_res.json()["id"]
+
+    session_items_res = client.get(
+        f"/api/v1/activities/sessions/{session_id}/items",
+        headers=headers,
+    )
+    assert session_items_res.status_code == 200
+    items = session_items_res.json()
+    assert len(items) == 3
+    assert items[0]["microconcept_id"] == str(mc_due.id)
+    assert items[1]["microconcept_id"] == str(mc_due.id)
 
 
 def test_create_activity_session_adaptive_selection_prioritizes_at_risk(db_session):

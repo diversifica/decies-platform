@@ -303,6 +303,49 @@ def _adaptive_order_items_v2(
     return ordered
 
 
+def _prioritize_due_microconcepts_for_review(
+    *,
+    ordered_items: list[Item],
+    mastery_by_microconcept: dict[uuid.UUID, MasteryState],
+    now: datetime,
+) -> list[Item]:
+    """
+    For REVIEW sessions, prioritize items belonging to microconcepts that are due for review.
+
+    A microconcept is considered due if:
+    - no mastery state exists (no practice yet), or
+    - recommended_next_review_at is null, or
+    - recommended_next_review_at <= now
+    """
+    due_microconcept_ids: set[uuid.UUID] = set()
+    for mcid, ms in mastery_by_microconcept.items():
+        if ms is None:
+            due_microconcept_ids.add(mcid)
+            continue
+        if ms.recommended_next_review_at is None or ms.recommended_next_review_at <= now:
+            due_microconcept_ids.add(mcid)
+
+    # Treat microconcepts with no mastery row as due (e.g., new items introduced).
+    for item in ordered_items:
+        if not item.microconcept_id:
+            continue
+        if item.microconcept_id not in mastery_by_microconcept:
+            due_microconcept_ids.add(item.microconcept_id)
+
+    if not due_microconcept_ids:
+        return ordered_items
+
+    due: list[Item] = []
+    not_due: list[Item] = []
+    for item in ordered_items:
+        if item.microconcept_id and item.microconcept_id in due_microconcept_ids:
+            due.append(item)
+        else:
+            not_due.append(item)
+
+    return due + not_due
+
+
 def _apply_microconcept_cap(
     ordered_items: list[Item], *, item_count: int, max_per_microconcept: int
 ) -> list[Item]:
@@ -414,6 +457,7 @@ def create_session(
     if not candidate_items:
         raise HTTPException(status_code=404, detail="No items found for this subject/term")
 
+    now = datetime.utcnow()
     microconcept_ids = {i.microconcept_id for i in candidate_items if i.microconcept_id}
     mastery_by_microconcept = _fetch_mastery_map(
         db, student_id=session_data.student_id, microconcept_ids=microconcept_ids
@@ -428,6 +472,12 @@ def create_session(
         term_id=session_data.term_id,
         candidate_microconcept_ids=microconcept_ids,
     )
+    if activity_type.code == "REVIEW":
+        ordered_items = _prioritize_due_microconcepts_for_review(
+            ordered_items=ordered_items,
+            mastery_by_microconcept=mastery_by_microconcept,
+            now=now,
+        )
     selected_items = _apply_microconcept_cap(
         ordered_items,
         item_count=session_data.item_count,
@@ -443,7 +493,7 @@ def create_session(
         subject_id=session_data.subject_id,
         term_id=session_data.term_id,
         topic_id=session_data.topic_id,
-        started_at=datetime.utcnow(),
+        started_at=now,
         status="in_progress",
         device_type=session_data.device_type,
     )
@@ -457,7 +507,7 @@ def create_session(
             session_id=session.id,
             item_id=item.id,
             order_index=idx,
-            presented_at=datetime.utcnow() if idx == 0 else None,
+            presented_at=now if idx == 0 else None,
         )
         db.add(session_item)
 
