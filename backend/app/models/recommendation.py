@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -62,6 +72,13 @@ class RecommendationInstance(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)  # Human readable title
     description: Mapped[str] = mapped_column(Text, nullable=False)  # Description of what to do
 
+    evaluation_window_days: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("14"),
+        default=14,
+        nullable=False,
+    )
+
     generated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -80,6 +97,12 @@ class RecommendationInstance(Base):
     )
     decision: Mapped["TutorDecision"] = relationship(
         "TutorDecision",
+        back_populates="recommendation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    outcome: Mapped["RecommendationOutcome | None"] = relationship(
+        "RecommendationOutcome",
         back_populates="recommendation",
         uselist=False,
         cascade="all, delete-orphan",
@@ -140,4 +163,41 @@ class TutorDecision(Base):
 
     recommendation: Mapped["RecommendationInstance"] = relationship(
         "RecommendationInstance", back_populates="decision"
+    )
+
+
+class RecommendationOutcome(Base):
+    __tablename__ = "recommendation_outcomes"
+    __table_args__ = (
+        UniqueConstraint("recommendation_id", name="recommendation_outcomes_recommendation_id_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recommendation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "recommendation_instances.id",
+            name="recommendation_outcomes_recommendation_id_fkey",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        unique=True,
+    )
+    evaluation_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evaluation_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    success: Mapped[str] = mapped_column(String(20), nullable=False)
+    delta_mastery: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    delta_retention: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    delta_accuracy: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    delta_hint_rate: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    recommendation: Mapped["RecommendationInstance"] = relationship(
+        "RecommendationInstance",
+        back_populates="outcome",
     )
