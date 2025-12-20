@@ -226,6 +226,8 @@ def test_e2e_04_grade_report_recommendation_outcome_flow(db_session: Session):
     pending_recs = recs_res.json()
     assert pending_recs
     target_rec = next((r for r in pending_recs if r["rule_id"] == "R01"), pending_recs[0])
+    allowed_categories = {"focus", "strategy", "dosage", "external_validation"}
+    assert all(r.get("category") in allowed_categories for r in pending_recs)
 
     decision_res = client.post(
         f"/api/v1/recommendations/{target_rec['id']}/decision",
@@ -377,3 +379,6 @@ def test_e2e_04_grade_report_recommendation_outcome_flow(db_session: Session):
     section = next(s for s in report2["sections"] if s["section_type"] == "recommendation_outcomes")
     assert section["data"]["stats"]["with_outcome"] >= 1
     assert any(e.get("outcome") for e in section["data"]["accepted"])
+    first = next(e for e in section["data"]["accepted"] if e.get("outcome"))
+    assert first.get("rule_id")
+    assert first.get("category") in {"focus", "strategy", "dosage", "external_validation"}

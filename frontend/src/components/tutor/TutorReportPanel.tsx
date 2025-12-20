@@ -78,6 +78,16 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
         return `${sign}${value.toFixed(3)}`;
     }, []);
 
+    const categoryLabel = useCallback((category: string | null | undefined) => {
+        switch ((category || '').toLowerCase()) {
+            case 'focus': return 'Focus';
+            case 'strategy': return 'Estrategia';
+            case 'dosage': return 'Dosificación';
+            case 'external_validation': return 'Validación externa';
+            default: return null;
+        }
+    }, []);
+
     const outcomeBadge = useCallback((success: string | null | undefined) => {
         const normalized = (success || '').toLowerCase();
         if (!normalized) return { label: 'Pendiente', color: 'var(--text-secondary)' };
@@ -195,6 +205,8 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
                                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                     <thead>
                                                         <tr style={{ textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                                            <th style={{ padding: '0.5rem' }}>Código</th>
+                                                            <th style={{ padding: '0.5rem' }}>Categoría</th>
                                                             <th style={{ padding: '0.5rem' }}>Recomendación</th>
                                                             <th style={{ padding: '0.5rem' }}>Impacto</th>
                                                             <th style={{ padding: '0.5rem' }}>Δ Accuracy</th>
@@ -206,8 +218,17 @@ export default function TutorReportPanel({ tutorId, studentId, subjectId, termId
                                                     <tbody>
                                                         {section.data.accepted.map((entry: any) => {
                                                             const badge = outcomeBadge(entry?.outcome?.success);
+                                                            const category = categoryLabel(entry?.category);
                                                             return (
                                                                 <tr key={entry.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                                                                    <td style={{ padding: '0.5rem' }}>
+                                                                        <span className="badge" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}>
+                                                                            {entry?.rule_id || '-'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td style={{ padding: '0.5rem', color: 'var(--text-secondary)' }}>
+                                                                        {category || '-'}
+                                                                    </td>
                                                                     <td style={{ padding: '0.5rem' }}>{entry.title}</td>
                                                                     <td style={{ padding: '0.5rem' }}>
                                                                         <span className="badge" style={{ backgroundColor: badge.color }}>
