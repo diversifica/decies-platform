@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
 import ProcessButton from './ProcessButton';
+import UploadItemsManager from './UploadItemsManager';
 
 interface Upload {
     id: string;
@@ -20,6 +21,7 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [itemsUploadId, setItemsUploadId] = useState<string | null>(null);
 
     const fetchUploads = async () => {
         try {
@@ -67,7 +69,12 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
                             <td style={{ padding: '0.5rem' }}>{upload.upload_type}</td>
                             <td style={{ padding: '0.5rem' }}>{new Date(upload.created_at).toLocaleDateString()}</td>
                             <td style={{ padding: '0.5rem' }}>
-                                <ProcessButton uploadId={upload.id} />
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <ProcessButton uploadId={upload.id} />
+                                    <button className="btn btn-secondary" onClick={() => setItemsUploadId(upload.id)}>
+                                        Ítems
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -76,6 +83,10 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
             <button onClick={fetchUploads} style={{ marginTop: '1rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 Refrescar lista
             </button>
+
+            {itemsUploadId && (
+                <UploadItemsManager uploadId={itemsUploadId} onClose={() => setItemsUploadId(null)} />
+            )}
         </div>
     );
 }
