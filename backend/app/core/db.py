@@ -28,6 +28,7 @@ def get_db() -> Iterator[Session]:
 from app.models import (  # noqa: E402, F401, I001
     activity,
     content,
+    grade,
     item,
     knowledge,
     llm_run,
