@@ -168,6 +168,7 @@ def seed_db():
         # 6. Create Activity Types (Day 4)
         activity_types_data = [
             ("QUIZ", "Quiz Interactivo"),
+            ("EXAM_STYLE", "Modo Examen"),
             ("MATCH", "Emparejar Conceptos"),
             ("CLOZE", "Completar Huecos"),
             ("REVIEW", "Revisión Espaciada"),
