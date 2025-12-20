@@ -11,6 +11,7 @@ from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
 from app.models.recommendation import RecommendationInstance, RecommendationStatus
+from app.models.recommendation_catalog import RecommendationCatalog
 from app.models.report import TutorReport, TutorReportSection
 from app.models.topic import Topic
 from app.services.metric_service import metric_service
@@ -135,6 +136,16 @@ class ReportService:
             .all()
         )
 
+        recommendation_categories: dict[str, str] = {}
+        rec_codes = {rec.rule_id for rec in pending_recommendations}
+        if rec_codes:
+            rows = (
+                db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+                .filter(RecommendationCatalog.code.in_(rec_codes))
+                .all()
+            )
+            recommendation_categories.update({code: category for code, category in rows})
+
         accepted_recommendations = (
             db.query(RecommendationInstance)
             .outerjoin(MicroConcept, RecommendationInstance.microconcept_id == MicroConcept.id)
@@ -151,6 +162,15 @@ class ReportService:
             .limit(20)
             .all()
         )
+
+        accepted_codes = {rec.rule_id for rec in accepted_recommendations}
+        if accepted_codes:
+            rows = (
+                db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+                .filter(RecommendationCatalog.code.in_(accepted_codes))
+                .all()
+            )
+            recommendation_categories.update({code: category for code, category in rows})
 
         accepted_payload: list[dict[str, Any]] = []
         with_outcome = 0
@@ -186,6 +206,9 @@ class ReportService:
             accepted_payload.append(
                 {
                     "id": str(rec.id),
+                    "rule_id": rec.rule_id,
+                    "category": recommendation_categories.get(rec.rule_id),
+                    "priority": _priority_to_str(rec.priority),
                     "title": rec.title,
                     "description": rec.description,
                     "updated_at": rec.updated_at.isoformat() if rec.updated_at else None,
@@ -503,6 +526,7 @@ class ReportService:
                         {
                             "id": str(rec.id),
                             "rule_id": rec.rule_id,
+                            "category": recommendation_categories.get(rec.rule_id),
                             "priority": _priority_to_str(rec.priority),
                             "title": rec.title,
                             "description": rec.description,
