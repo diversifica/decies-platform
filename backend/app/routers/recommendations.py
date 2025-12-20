@@ -2,7 +2,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_role_name, get_current_tutor
@@ -59,7 +59,15 @@ def get_student_recommendations(
         # Run generation logic
         recommendation_service.generate_recommendations(db, student_id, subject_id, term_id)
 
-    query = db.query(RecommendationInstance).filter(RecommendationInstance.student_id == student_id)
+    query = (
+        db.query(RecommendationInstance)
+        .options(
+            selectinload(RecommendationInstance.evidence),
+            selectinload(RecommendationInstance.decision),
+            selectinload(RecommendationInstance.outcome),
+        )
+        .filter(RecommendationInstance.student_id == student_id)
+    )
 
     if status_filter != "all":
         query = query.filter(RecommendationInstance.status == status_filter)
@@ -81,7 +89,16 @@ def get_recommendation(
     if role_name != "tutor":
         raise HTTPException(status_code=403, detail="Role not allowed")
 
-    rec = db.get(RecommendationInstance, recommendation_id)
+    rec = (
+        db.query(RecommendationInstance)
+        .options(
+            selectinload(RecommendationInstance.evidence),
+            selectinload(RecommendationInstance.decision),
+            selectinload(RecommendationInstance.outcome),
+        )
+        .filter(RecommendationInstance.id == recommendation_id)
+        .first()
+    )
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
 

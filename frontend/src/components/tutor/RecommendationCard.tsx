@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import api from '../../services/api';
 
 interface Evidence {
@@ -18,6 +18,18 @@ interface Recommendation {
     rule_id: string;
     generated_at: string;
     evidence: Evidence[];
+    outcome?: {
+        id: string;
+        recommendation_id: string;
+        evaluation_start: string;
+        evaluation_end: string;
+        success: string; // true/false/partial
+        delta_mastery?: number | null;
+        delta_accuracy?: number | null;
+        delta_hint_rate?: number | null;
+        computed_at: string;
+        notes?: string | null;
+    } | null;
 }
 
 interface RecommendationCardProps {
@@ -56,6 +68,23 @@ export default function RecommendationCard({ recommendation, tutorId, onDecision
         }
     };
 
+    const outcomeBadge = useMemo(() => {
+        const outcome = recommendation.outcome;
+        if (!outcome) return null;
+
+        const success = (outcome.success || '').toLowerCase();
+        if (success === 'true') return { label: 'Éxito', color: 'var(--success)' };
+        if (success === 'false') return { label: 'Sin efecto', color: 'var(--error)' };
+        return { label: 'Parcial', color: 'var(--warning)' };
+    }, [recommendation.outcome]);
+
+    const formatDelta = (value: number | null | undefined, unit: 'pp' | 'score') => {
+        if (value == null || Number.isNaN(value)) return 'N/A';
+        const sign = value > 0 ? '+' : '';
+        if (unit === 'pp') return `${sign}${(value * 100).toFixed(1)}pp`;
+        return `${sign}${value.toFixed(3)}`;
+    };
+
     return (
         <div className="card" style={{ borderLeft: `4px solid ${getPriorityColor(recommendation.priority)}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -71,6 +100,53 @@ export default function RecommendationCard({ recommendation, tutorId, onDecision
             </div>
 
             <p style={{ margin: '1rem 0' }}>{recommendation.description}</p>
+
+            {recommendation.status === 'accepted' && (
+                <div
+                    style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        padding: '0.8rem',
+                        borderRadius: 'var(--radius-sm)',
+                        marginBottom: '1rem',
+                    }}
+                >
+                    <div
+                        style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: '1rem',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <h4 style={{ fontSize: '0.9rem', margin: 0 }}>Impacto</h4>
+                        {outcomeBadge && (
+                            <span className="badge" style={{ backgroundColor: outcomeBadge.color }}>
+                                {outcomeBadge.label}
+                            </span>
+                        )}
+                    </div>
+
+                    {recommendation.outcome ? (
+                        <div style={{ marginTop: '0.6rem', display: 'grid', gap: '0.35rem', fontSize: '0.9rem' }}>
+                            <div style={{ color: 'var(--text-secondary)' }}>
+                                Ventana: {new Date(recommendation.outcome.evaluation_start).toLocaleDateString()} —{' '}
+                                {new Date(recommendation.outcome.evaluation_end).toLocaleDateString()}
+                            </div>
+                            <div>
+                                Δ Accuracy: <strong>{formatDelta(recommendation.outcome.delta_accuracy, 'pp')}</strong>
+                                {' · '}
+                                Δ Mastery: <strong>{formatDelta(recommendation.outcome.delta_mastery, 'score')}</strong>
+                                {' · '}
+                                Δ Hint: <strong>{formatDelta(recommendation.outcome.delta_hint_rate, 'pp')}</strong>
+                            </div>
+                        </div>
+                    ) : (
+                        <p style={{ margin: '0.6rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                            Aún no hay impacto calculado para esta recomendación.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {recommendation.evidence.length > 0 && (
                 <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '0.8rem', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
