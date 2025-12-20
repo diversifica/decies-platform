@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.activity import ActivitySession
+from app.models.activity import ActivitySession, ActivityType, LearningEvent
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
 from app.models.recommendation import (
@@ -48,6 +49,23 @@ class RecommendationService:
             .order_by(MetricAggregate.computed_at.desc())
             .first()
         )
+        accuracy = float(metrics.accuracy) if metrics and metrics.accuracy is not None else None
+        first_attempt_accuracy = (
+            float(metrics.first_attempt_accuracy)
+            if metrics and metrics.first_attempt_accuracy is not None
+            else None
+        )
+        hint_rate = float(metrics.hint_rate) if metrics and metrics.hint_rate is not None else None
+        attempts_per_item_avg = (
+            float(metrics.attempts_per_item_avg)
+            if metrics and metrics.attempts_per_item_avg is not None
+            else None
+        )
+        median_response_time_ms = (
+            int(metrics.median_response_time_ms)
+            if metrics and metrics.median_response_time_ms is not None
+            else None
+        )
 
         # Mastery states
         mastery_states = (
@@ -71,6 +89,9 @@ class RecommendationService:
         # 2. Rule R01: General Low Accuracy (Scope: Subject)
         # Condition: accuracy < 0.5
         if metrics and metrics.accuracy < 0.5:
+            accuracy_pct = int(
+                (accuracy if accuracy is not None else float(metrics.accuracy)) * 100
+            )
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
@@ -78,7 +99,7 @@ class RecommendationService:
                 title="Refuerzo General Necesario",
                 description=(
                     "El estudiante tiene un rendimiento global bajo "
-                    f"({int(metrics.accuracy * 100)}%). Se recomienda asignar actividades "
+                    f"({accuracy_pct}%). Se recomienda asignar actividades "
                     "de repaso general."
                 ),
                 priority=RecommendationPriority.HIGH,
@@ -449,6 +470,358 @@ class RecommendationService:
                 )
                 if rec:
                     generated_recs.append(rec)
+
+        # Strategy rules (R12-R20)
+
+        # Rule R12: Limit hints if dependency is high.
+        hint_rate_effective = hint_rate
+        if hint_rate_effective is None:
+            window_start = now - timedelta(days=30)
+            total_events = (
+                db.query(LearningEvent)
+                .filter(
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.subject_id == subject_id,
+                    LearningEvent.term_id == term_id,
+                    LearningEvent.timestamp_start >= window_start,
+                )
+                .count()
+            )
+            hint_events = (
+                db.query(LearningEvent)
+                .filter(
+                    LearningEvent.student_id == student_id,
+                    LearningEvent.subject_id == subject_id,
+                    LearningEvent.term_id == term_id,
+                    LearningEvent.timestamp_start >= window_start,
+                    LearningEvent.hint_used.is_not(None),
+                    LearningEvent.hint_used != "none",
+                )
+                .count()
+            )
+            hint_rate_effective = (hint_events / total_events) if total_events else 0.0
+
+        if hint_rate_effective >= 0.4:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R12",
+                title="Limitar uso de pistas",
+                description=(
+                    "Se detecta una dependencia alta de pistas. "
+                    "Conviene reducir su uso gradualmente para mejorar recuperación sin ayudas."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="hint_rate",
+                        value=str(hint_rate_effective),
+                        description="Tasa de uso de pistas elevada",
+                    )
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R13: Replace passive review with active retrieval if first-attempt is weak.
+        if first_attempt_accuracy is not None and first_attempt_accuracy < 0.5:
+            if attempts_per_item_avg is None or attempts_per_item_avg >= 1.5:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R13",
+                    title="Sustituir repaso pasivo por práctica activa",
+                    description=(
+                        "El primer intento es bajo. Recomienda priorizar práctica de recuperación "
+                        "(preguntas sin apoyo) sobre repaso pasivo."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="first_attempt_accuracy",
+                            value=str(first_attempt_accuracy),
+                            description="Primer intento bajo",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="attempts_per_item_avg",
+                            value=str(attempts_per_item_avg),
+                            description="Intentos por ítem (indicador de recuperación débil)",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R14: Introduce interleaving for stable performance with multiple concepts.
+        if accuracy is not None and accuracy >= 0.75 and in_progress_count >= 2:
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R14",
+                title="Introducir intercalado",
+                description=(
+                    "El rendimiento es estable y hay varios microconceptos en progreso. "
+                    "Conviene mezclar práctica (intercalado) para mejorar discriminación "
+                    "y transferencia."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(accuracy),
+                        description="Precisión estable",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="in_progress_count",
+                        value=str(in_progress_count),
+                        description="Microconceptos en progreso",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R15: Fall back to blocked practice when struggling (high attempts + low accuracy).
+        if accuracy is not None and accuracy < 0.6 and attempts_per_item_avg is not None:
+            if attempts_per_item_avg > 2.2:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R15",
+                    title="Volver a práctica bloqueada",
+                    description=(
+                        "Se observa dificultad y muchos intentos por ítem. "
+                        "Conviene practicar por bloques (menos intercalado) para estabilizar."
+                    ),
+                    priority=RecommendationPriority.MEDIUM,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="accuracy",
+                            value=str(accuracy),
+                            description="Precisión baja",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="attempts_per_item_avg",
+                            value=str(attempts_per_item_avg),
+                            description="Intentos por ítem altos",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R16: Change activity type when current pattern is inefficient.
+        week_ago = now - timedelta(days=7)
+        recent_by_type = (
+            db.query(ActivityType.code, func.count(ActivitySession.id))
+            .join(ActivityType, ActivitySession.activity_type_id == ActivityType.id)
+            .filter(
+                ActivitySession.student_id == student_id,
+                ActivitySession.subject_id == subject_id,
+                ActivitySession.term_id == term_id,
+                ActivitySession.started_at >= week_ago,
+            )
+            .group_by(ActivityType.code)
+            .all()
+        )
+        total_recent_sessions = sum(count for _code, count in recent_by_type)
+        top_code = None
+        top_count = 0
+        for code, count in recent_by_type:
+            if int(count) > top_count:
+                top_code = code
+                top_count = int(count)
+
+        if total_recent_sessions >= 3 and top_code == "QUIZ":
+            if (median_response_time_ms is not None and median_response_time_ms > 20000) or (
+                accuracy is not None and accuracy < 0.65
+            ):
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R16",
+                    title="Cambiar tipo de actividad",
+                    description=(
+                        "La mayor parte de la práctica reciente es tipo Quiz "
+                        "y hay señales de ineficiencia. "
+                        "Conviene alternar a Match/Cloze o sesiones más cortas "
+                        "para variar el formato."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="recent_sessions_7d",
+                            value=str(total_recent_sessions),
+                            description="Sesiones en 7 días",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="summary",
+                            key="dominant_activity_type",
+                            value=str(top_code),
+                            description="Tipo de actividad predominante",
+                        ),
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="median_response_time_ms",
+                            value=str(median_response_time_ms),
+                            description="Tiempo mediano de respuesta",
+                        ),
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R17: Add concrete examples for weakest at-risk microconcepts (with practice).
+        at_risk_practiced = [
+            ms
+            for ms in mastery_states
+            if ms.status == "at_risk"
+            and ms.last_practice_at is not None
+            and float(ms.mastery_score) < 0.4
+        ]
+        at_risk_practiced.sort(key=lambda ms: float(ms.mastery_score))
+        for state in at_risk_practiced[:2]:
+            mc_name = microconcept_name_by_id.get(state.microconcept_id, "Microconcepto")
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R17",
+                title=f"Aumentar ejemplos concretos: {mc_name}",
+                description=(
+                    "Hay errores persistentes en este microconcepto. "
+                    "Conviene añadir ejemplos guiados y practicar con soluciones explicadas."
+                ),
+                priority=RecommendationPriority.MEDIUM,
+                microconcept_id=state.microconcept_id,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="status",
+                        value=state.status,
+                        description="Microconcepto en riesgo",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="mastery_state",
+                        key="mastery_score",
+                        value=str(state.mastery_score),
+                        description="Dominio bajo",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R18: Controlled variability when mastery is high (avoid overfitting).
+        if (
+            accuracy is not None
+            and accuracy >= 0.8
+            and dominant_count >= 2
+            and in_progress_count >= 1
+        ):
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R18",
+                title="Introducir variabilidad controlada",
+                description=(
+                    "El rendimiento es alto. Conviene introducir variabilidad controlada "
+                    "para mejorar transferencia y evitar sobreajuste a un patrón de preguntas."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(accuracy),
+                        description="Precisión alta",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="summary",
+                        key="dominant_count",
+                        value=str(dominant_count),
+                        description="Microconceptos dominados",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
+
+        # Rule R19: Add explanation after error when confusion is high.
+        if accuracy is not None and accuracy < 0.7 and attempts_per_item_avg is not None:
+            if attempts_per_item_avg > 2.0:
+                rec = self._create_or_get_recommendation(
+                    db,
+                    student_id=student_id,
+                    rule_id="R19",
+                    title="Añadir explicación tras error",
+                    description=(
+                        "Hay señales de confusión (muchos intentos por ítem). "
+                        "Conviene mostrar una explicación breve tras error "
+                        "cuando el mismo fallo se repite."
+                    ),
+                    priority=RecommendationPriority.LOW,
+                    evidence=[
+                        RecommendationEvidenceCreate(
+                            evidence_type="metric_value",
+                            key="attempts_per_item_avg",
+                            value=str(attempts_per_item_avg),
+                            description="Intentos por ítem elevados",
+                        )
+                    ],
+                )
+                if rec:
+                    generated_recs.append(rec)
+
+        # Rule R20: Reduce anticipatory explanation when performance is very good.
+        if (
+            accuracy is not None
+            and accuracy >= 0.85
+            and median_response_time_ms is not None
+            and median_response_time_ms < 8000
+            and hint_rate_effective is not None
+            and hint_rate_effective < 0.2
+        ):
+            rec = self._create_or_get_recommendation(
+                db,
+                student_id=student_id,
+                rule_id="R20",
+                title="Reducir explicación anticipada",
+                description=(
+                    "El alumno rinde muy bien y con baja dependencia de ayudas. "
+                    "Conviene reducir explicación previa excesiva y priorizar ensayo/recuperación."
+                ),
+                priority=RecommendationPriority.LOW,
+                evidence=[
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="accuracy",
+                        value=str(accuracy),
+                        description="Precisión muy alta",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="median_response_time_ms",
+                        value=str(median_response_time_ms),
+                        description="Tiempo de respuesta bajo",
+                    ),
+                    RecommendationEvidenceCreate(
+                        evidence_type="metric_value",
+                        key="hint_rate",
+                        value=str(hint_rate_effective),
+                        description="Baja dependencia de ayudas",
+                    ),
+                ],
+            )
+            if rec:
+                generated_recs.append(rec)
 
         # 4. Rule R05: Reinforce Prerequisites
         # Condition: target microconcept is at_risk AND has been practiced at least once
