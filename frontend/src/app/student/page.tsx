@@ -19,8 +19,12 @@ interface Upload {
 export default function StudentPage() {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
-    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'EXAM_STYLE' | 'MATCH' | 'CLOZE'>('QUIZ');
+    const [activeActivity, setActiveActivity] = useState<{
+        mode: 'QUIZ' | 'EXAM_STYLE' | 'MATCH' | 'CLOZE' | 'REVIEW';
+        upload?: Upload | null;
+        subjectId: string;
+        termId: string;
+    } | null>(null);
     const [me, setMe] = useState<AuthMe | null>(null);
     const [actionError, setActionError] = useState<string>('');
     const [actionLoading, setActionLoading] = useState(false);
@@ -75,8 +79,7 @@ export default function StudentPage() {
                 return;
             }
 
-            setSelectedMode(mode);
-            setSelectedUpload(upload);
+            setActiveActivity({ mode, upload, subjectId: upload.subject_id, termId: upload.term_id });
         } catch (err: any) {
             console.error(err);
             setActionError(err?.response?.data?.detail || err?.message || 'No se pudo abrir la actividad.');
@@ -85,45 +88,71 @@ export default function StudentPage() {
         }
     };
 
-    if (selectedUpload) {
+    const openReview = () => {
+        if (!studentId) return;
+        setActionError('');
+        const scope = uploads[0];
+        if (!scope) {
+            setActionError('Aún no hay contenido disponible para revisar.');
+            return;
+        }
+        setActiveActivity({ mode: 'REVIEW', upload: null, subjectId: scope.subject_id, termId: scope.term_id });
+    };
+
+    if (activeActivity) {
         if (!studentId) {
             return <p>No hay estudiante asociado a esta sesión. Inicia sesión como estudiante.</p>;
         }
-        return selectedMode === 'MATCH' ? (
+
+        if (activeActivity.mode !== 'REVIEW' && !activeActivity.upload?.id) {
+            return (
+                <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                    <h3>Error</h3>
+                    <p>No se encontró el contenido seleccionado. Vuelve a intentarlo.</p>
+                    <button className="btn btn-secondary" onClick={() => setActiveActivity(null)}>
+                        Volver
+                    </button>
+                </div>
+            );
+        }
+
+        const uploadId = activeActivity.upload?.id;
+
+        return activeActivity.mode === 'MATCH' ? (
             <MatchRunner
-                uploadId={selectedUpload.id}
+                uploadId={uploadId!}
                 studentId={studentId}
-                subjectId={selectedUpload.subject_id}
-                termId={selectedUpload.term_id}
-                onExit={() => setSelectedUpload(null)}
+                subjectId={activeActivity.subjectId}
+                termId={activeActivity.termId}
+                onExit={() => setActiveActivity(null)}
             />
-        ) : selectedMode === 'CLOZE' ? (
+        ) : activeActivity.mode === 'CLOZE' ? (
             <ClozeRunner
-                uploadId={selectedUpload.id}
+                uploadId={uploadId!}
                 studentId={studentId}
-                subjectId={selectedUpload.subject_id}
-                termId={selectedUpload.term_id}
-                onExit={() => setSelectedUpload(null)}
+                subjectId={activeActivity.subjectId}
+                termId={activeActivity.termId}
+                onExit={() => setActiveActivity(null)}
             />
-        ) : selectedMode === 'EXAM_STYLE' ? (
+        ) : activeActivity.mode === 'EXAM_STYLE' ? (
             <QuizRunner
-                uploadId={selectedUpload.id}
+                uploadId={uploadId}
                 studentId={studentId}
-                subjectId={selectedUpload.subject_id}
-                termId={selectedUpload.term_id}
-                onExit={() => setSelectedUpload(null)}
+                subjectId={activeActivity.subjectId}
+                termId={activeActivity.termId}
+                onExit={() => setActiveActivity(null)}
                 activityCode="EXAM_STYLE"
                 examMode
                 timeLimitSeconds={10 * 60}
             />
         ) : (
             <QuizRunner
-                uploadId={selectedUpload.id}
+                uploadId={activeActivity.mode === 'REVIEW' ? undefined : uploadId}
                 studentId={studentId}
-                subjectId={selectedUpload.subject_id}
-                termId={selectedUpload.term_id}
-                onExit={() => setSelectedUpload(null)}
-                activityCode="QUIZ"
+                subjectId={activeActivity.subjectId}
+                termId={activeActivity.termId}
+                onExit={() => setActiveActivity(null)}
+                activityCode={activeActivity.mode === 'REVIEW' ? 'REVIEW' : 'QUIZ'}
             />
         );
     }
@@ -141,6 +170,30 @@ export default function StudentPage() {
             />
 
             {actionError && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{actionError}</p>}
+
+            <div className="card" style={{ marginTop: '1.25rem', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                    <div>
+                        <h4 style={{ margin: 0 }}>Revisión</h4>
+                        <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                            Repasa priorizando microconceptos vencidos.
+                        </p>
+                    </div>
+                    <button
+                        disabled={!studentId || actionLoading || uploads.length === 0}
+                        onClick={openReview}
+                        className="btn btn-secondary"
+                        title={uploads.length === 0 ? 'Sube y procesa contenido para habilitar revisión.' : 'Iniciar sesión de revisión'}
+                    >
+                        Iniciar revisión
+                    </button>
+                </div>
+                {studentId && uploads.length === 0 && (
+                    <p style={{ margin: '0.75rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                        Aún no hay contenido disponible; pide al tutor que suba y procese material.
+                    </p>
+                )}
+            </div>
 
             {loading ? <p>Cargando actividades...</p> : (
                 <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem' }}>
