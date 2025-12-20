@@ -110,7 +110,23 @@ export default function QuizRunner({
                 // 3. Get session items (ordered)
                 const sessionItemsRes = await api.get(`/activities/sessions/${sessionRes.data.id}/items`);
                 if (!cancelled) {
-                    setItems(sessionItemsRes.data);
+                    const fetchedItems: any[] = Array.isArray(sessionItemsRes.data) ? sessionItemsRes.data : [];
+                    if (fetchedItems.length === 0) {
+                        try {
+                            await api.post(`/activities/sessions/${sessionRes.data.id}/end`);
+                        } catch (endErr: any) {
+                            console.error('Error ending empty session:', endErr);
+                        }
+
+                        if (activityCode === 'REVIEW') {
+                            setInitError('No hay ítems disponibles para revisión todavía.');
+                        } else {
+                            setInitError('No hay preguntas disponibles para este contenido.');
+                        }
+                        return;
+                    }
+
+                    setItems(fetchedItems);
                     setQuestionStartTime(new Date());
                     if (examMode && typeof timeLimitSeconds === 'number' && timeLimitSeconds > 0) {
                         const endsAt = Date.now() + timeLimitSeconds * 1000;
@@ -190,11 +206,15 @@ export default function QuizRunner({
     if (!sessionId || !activityTypeId) return <p>Cargando sesión...</p>;
     if (items.length === 0) {
         return (
-            <p>
-                {activityCode === 'REVIEW'
-                    ? 'No hay ítems disponibles para revisión todavía.'
-                    : 'No hay preguntas disponibles para este contenido.'}
-            </p>
+            <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <h3 style={{ marginBottom: '0.75rem' }}>No hay contenido para esta actividad</h3>
+                <p style={{ color: 'var(--text-secondary)', marginTop: 0 }}>
+                    {activityCode === 'REVIEW'
+                        ? 'No hay ítems disponibles para revisión todavía.'
+                        : 'No hay preguntas disponibles para este contenido.'}
+                </p>
+                <button onClick={onExit} className="btn">Volver</button>
+            </div>
         );
     }
 
