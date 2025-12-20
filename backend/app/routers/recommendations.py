@@ -9,12 +9,15 @@ from app.core.deps import get_current_active_user, get_current_role_name, get_cu
 from app.models.recommendation import RecommendationInstance
 from app.models.student import Student
 from app.models.subject import Subject
+from app.models.term import Term
 from app.models.user import User
 from app.schemas.recommendation import (
     RecommendationInstanceResponse,
+    RecommendationOutcomeComputeResponse,
     TutorDecisionCreate,
     TutorDecisionResponse,
 )
+from app.services.recommendation_outcome_service import recommendation_outcome_service
 from app.services.recommendation_service import recommendation_service
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -127,3 +130,50 @@ def make_tutor_decision(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/outcomes/compute", response_model=RecommendationOutcomeComputeResponse)
+def compute_recommendation_outcomes(
+    student_id: uuid.UUID,
+    subject_id: uuid.UUID,
+    term_id: uuid.UUID,
+    force: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    role_name = get_current_role_name(db, current_user)
+    if role_name != "tutor":
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
+    tutor = get_current_tutor(db=db, current_user=current_user)
+
+    subject = db.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    if subject.tutor_id and subject.tutor_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    if not db.get(Term, term_id):
+        raise HTTPException(status_code=404, detail="Term not found")
+
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if student.subject_id and student.subject_id != subject_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    outcomes, created, updated, pending = recommendation_outcome_service.compute_outcomes(
+        db,
+        tutor_id=tutor.id,
+        student_id=student_id,
+        subject_id=subject_id,
+        term_id=term_id,
+        force=force,
+    )
+
+    return {
+        "outcomes": outcomes,
+        "created": created,
+        "updated": updated,
+        "pending": pending,
+    }

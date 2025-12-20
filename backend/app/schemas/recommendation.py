@@ -58,12 +58,37 @@ class RecommendationInstanceCreate(RecommendationInstanceBase):
     evidence_list: List[RecommendationEvidenceCreate]
 
 
+class RecommendationOutcomeResponse(BaseModel):
+    id: uuid.UUID
+    recommendation_id: uuid.UUID
+    evaluation_start: datetime
+    evaluation_end: datetime
+    success: str
+    delta_mastery: float | None = None
+    delta_retention: float | None = None
+    delta_accuracy: float | None = None
+    delta_hint_rate: float | None = None
+    computed_at: datetime
+    notes: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class RecommendationInstanceResponse(RecommendationInstanceBase):
     id: uuid.UUID
     generated_at: datetime
     updated_at: datetime
     evidence: List[RecommendationEvidenceResponse]
     decision: Optional[TutorDecisionResponse] = None
+    outcome: Optional[RecommendationOutcomeResponse] = None
 
     class Config:
         from_attributes = True
+
+
+class RecommendationOutcomeComputeResponse(BaseModel):
+    outcomes: list[RecommendationOutcomeResponse]
+    created: int
+    updated: int
+    pending: int
