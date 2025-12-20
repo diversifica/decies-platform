@@ -597,6 +597,12 @@ def _compute_cloze_correct(item: Item, response_normalized: str | None) -> bool:
     return any(_normalize_text(ans) == submitted for ans in acceptable if isinstance(ans, str))
 
 
+def _compute_quiz_correct(item: Item, response_normalized: str | None) -> bool:
+    if not response_normalized:
+        return False
+    return _normalize_text(response_normalized) == _normalize_text(item.correct_answer)
+
+
 @router.post("/sessions/{session_id}/responses", response_model=LearningEventResponse)
 def record_response(
     session_id: uuid.UUID,
@@ -634,6 +640,8 @@ def record_response(
         is_correct = _compute_match_correct(item, event_data.response_normalized)
     elif item.type == ItemType.CLOZE:
         is_correct = _compute_cloze_correct(item, event_data.response_normalized)
+    elif item.type in (ItemType.MCQ, ItemType.TRUE_FALSE):
+        is_correct = _compute_quiz_correct(item, event_data.response_normalized)
 
     # Create learning event
     event = LearningEvent(

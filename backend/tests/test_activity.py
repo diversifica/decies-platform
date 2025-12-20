@@ -74,6 +74,50 @@ def test_create_activity_session(db_session):
     assert data["student_id"] == str(student.id)
 
 
+def test_create_exam_style_activity_session(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="EXAM_STYLE").first()
+
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+
+    response = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 5,
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "in_progress"
+    assert data["student_id"] == str(student.id)
+
+
 def test_record_learning_event(db_session):
     """Test recording a learning event"""
     token_res = client.post(
@@ -95,7 +139,39 @@ def test_record_learning_event(db_session):
     subject = db_session.get(Subject, student.subject_id)
     term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
-    item = db_session.query(Item).first()
+    tutor = db_session.query(Tutor).first()
+    assert tutor is not None
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        tutor_id=tutor.id,
+        student_id=student.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        topic_id=None,
+        upload_type=ContentUploadType.pdf,
+        storage_uri="/test/event_test.pdf",
+        file_name="event_test.pdf",
+        mime_type="application/pdf",
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    item = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=None,
+        type=ItemType.MCQ,
+        stem="Test question",
+        options={"options": ["A", "B", "C"]},
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.commit()
 
     session_response = client.post(
         "/api/v1/activities/sessions",
@@ -126,10 +202,10 @@ def test_record_learning_event(db_session):
             "topic_id": None,
             "microconcept_id": None,
             "activity_type_id": str(activity_type.id),
-            "is_correct": True,
+            "is_correct": False,
             "duration_ms": 5000,
             "attempt_number": 1,
-            "response_normalized": "Test answer",
+            "response_normalized": "A",
             "hint_used": None,
             "difficulty_at_time": None,
             "timestamp_start": start_time.isoformat(),
@@ -198,6 +274,7 @@ def test_list_activity_types(db_session):
     data = response.json()
     assert len(data) >= 3  # QUIZ, MATCH, REVIEW from seed
     assert any(t["code"] == "QUIZ" for t in data)
+    assert any(t["code"] == "EXAM_STYLE" for t in data)
 
 
 def test_create_activity_session_adaptive_selection_prioritizes_at_risk(db_session):

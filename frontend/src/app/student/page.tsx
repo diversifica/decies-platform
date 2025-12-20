@@ -20,7 +20,7 @@ export default function StudentPage() {
     const [uploads, setUploads] = useState<Upload[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
-    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'MATCH' | 'CLOZE'>('QUIZ');
+    const [selectedMode, setSelectedMode] = useState<'QUIZ' | 'EXAM_STYLE' | 'MATCH' | 'CLOZE'>('QUIZ');
     const [me, setMe] = useState<AuthMe | null>(null);
     const [actionError, setActionError] = useState<string>('');
     const [actionLoading, setActionLoading] = useState(false);
@@ -51,7 +51,7 @@ export default function StudentPage() {
         loadUploads();
     }, [studentId]);
 
-    const openActivity = async (upload: Upload, mode: 'QUIZ' | 'MATCH' | 'CLOZE') => {
+    const openActivity = async (upload: Upload, mode: 'QUIZ' | 'EXAM_STYLE' | 'MATCH' | 'CLOZE') => {
         if (!studentId) return;
         setActionError('');
         setActionLoading(true);
@@ -66,7 +66,7 @@ export default function StudentPage() {
                 setActionError('Este contenido aún no tiene ítems MATCH. Por ahora usa Quiz.');
                 return;
             }
-            if (mode === 'QUIZ' && !hasQuiz) {
+            if ((mode === 'QUIZ' || mode === 'EXAM_STYLE') && !hasQuiz) {
                 setActionError('Este contenido aún no tiene preguntas de Quiz. Pide al tutor que lo procese.');
                 return;
             }
@@ -105,6 +105,17 @@ export default function StudentPage() {
                 termId={selectedUpload.term_id}
                 onExit={() => setSelectedUpload(null)}
             />
+        ) : selectedMode === 'EXAM_STYLE' ? (
+            <QuizRunner
+                uploadId={selectedUpload.id}
+                studentId={studentId}
+                subjectId={selectedUpload.subject_id}
+                termId={selectedUpload.term_id}
+                onExit={() => setSelectedUpload(null)}
+                activityCode="EXAM_STYLE"
+                examMode
+                timeLimitSeconds={10 * 60}
+            />
         ) : (
             <QuizRunner
                 uploadId={selectedUpload.id}
@@ -112,6 +123,7 @@ export default function StudentPage() {
                 subjectId={selectedUpload.subject_id}
                 termId={selectedUpload.term_id}
                 onExit={() => setSelectedUpload(null)}
+                activityCode="QUIZ"
             />
         );
     }
@@ -145,6 +157,13 @@ export default function StudentPage() {
                                     className="btn"
                                 >
                                     {actionLoading ? 'Cargando...' : 'Quiz'}
+                                </button>
+                                <button
+                                    disabled={!studentId || actionLoading}
+                                    onClick={() => openActivity(upload, 'EXAM_STYLE')}
+                                    className="btn btn-secondary"
+                                >
+                                    {actionLoading ? 'Cargando...' : 'Examen'}
                                 </button>
                                 <button
                                     disabled={!studentId || actionLoading}
