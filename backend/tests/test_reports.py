@@ -106,6 +106,7 @@ def test_generate_and_get_latest_report(db_session: Session):
         mastery_score=0.2,
         status="at_risk",
         last_practice_at=None,
+        recommended_next_review_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
     db_session.add_all([metrics, mastery])
@@ -171,6 +172,14 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert payload["tutor_id"] == str(tutor.id)
     assert len(payload["sections"]) >= 3
     assert any(s["section_type"] == "real_grades" for s in payload["sections"])
+    assert any(s["section_type"] == "review_schedule" for s in payload["sections"])
+
+    schedule_section = next(
+        s for s in payload["sections"] if s["section_type"] == "review_schedule"
+    )
+    assert "Vencidas" in schedule_section["content"]
+    assert "Concept A" in schedule_section["content"]
+    assert schedule_section["data"]["due"]
 
     latest_res = client.get(
         f"/api/v1/reports/students/{student.id}/latest",
@@ -181,6 +190,7 @@ def test_generate_and_get_latest_report(db_session: Session):
     latest = latest_res.json()
     assert latest["id"] == payload["id"]
     assert any(s["section_type"] == "executive_summary" for s in latest["sections"])
+    assert any(s["section_type"] == "review_schedule" for s in latest["sections"])
     assert any(s["section_type"] == "recommendations" for s in latest["sections"])
     assert any(s["section_type"] == "recommendation_outcomes" for s in latest["sections"])
     assert any(s["section_type"] == "student_feedback" for s in latest["sections"])
