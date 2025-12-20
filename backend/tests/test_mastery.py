@@ -41,6 +41,7 @@ def test_mastery_score_calculation(db_session, metric_service):
     for state in mastery_states:
         # Mastery score should be between 0 and 1
         assert 0.0 <= state.mastery_score <= 1.0
+        assert state.recommended_next_review_at is not None
 
         # Status should match score thresholds
         if state.mastery_score >= 0.8:

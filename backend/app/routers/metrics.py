@@ -172,6 +172,7 @@ def get_student_mastery(
                 mastery_score=ms.mastery_score,
                 status=ms.status,
                 last_practice_at=ms.last_practice_at,
+                recommended_next_review_at=ms.recommended_next_review_at,
                 total_events=event_count,
             )
         )
