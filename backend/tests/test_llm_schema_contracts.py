@@ -10,7 +10,7 @@ from app.services.llm_service import (
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
 
 
 def _load_schema(name: str) -> dict:
