@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,6 +50,10 @@ class ContentUpload(Base):
     file_name: Mapped[str] = mapped_column(String, nullable=False)
     mime_type: Mapped[str] = mapped_column(String, nullable=False)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    processing_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    processing_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP"), nullable=True
     )

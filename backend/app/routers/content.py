@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import (
@@ -13,6 +14,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.deps import (
     get_current_active_user,
@@ -138,12 +140,25 @@ def process_upload(
 
     # I'll update `process_content_upload` to create its own session using `SessionLocal`.
 
+    upload.processing_error = None
+
     if is_async_queue_enabled():
         try:
             job_id = enqueue_upload_processing(upload_id=upload_id)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Queue unavailable: {e}") from e
+
+        upload.processing_status = "queued"
+        upload.processing_job_id = job_id
+        db.add(upload)
+        db.commit()
+
         return {"message": "Processing enqueued", "upload_id": upload_id, "job_id": job_id}
+
+    upload.processing_status = "queued"
+    upload.processing_job_id = None
+    db.add(upload)
+    db.commit()
 
     background_tasks.add_task(run_pipeline_task, upload_id)
     return {"message": "Processing started", "upload_id": upload_id}
@@ -155,9 +170,56 @@ def run_pipeline_task(upload_id: uuid.UUID):
 
     db = SessionLocal()
     try:
+        upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+        if upload:
+            upload.processing_status = "running"
+            upload.processing_error = None
+            upload.processed_at = None
+            db.add(upload)
+            db.commit()
+
         process_content_upload(db, upload_id)
+
+        upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+        if upload:
+            upload.processing_status = "succeeded"
+            upload.processing_error = None
+            upload.processed_at = datetime.utcnow()
+            db.add(upload)
+            db.commit()
+    except Exception as e:  # noqa: BLE001
+        upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+        if upload:
+            upload.processing_status = "failed"
+            upload.processing_error = str(e)
+            db.add(upload)
+            db.commit()
+        raise
     finally:
         db.close()
+
+
+@router.get("/uploads/{upload_id}/processing")
+def get_upload_processing_state(
+    upload_id: uuid.UUID,
+    current_tutor: Tutor = Depends(get_current_tutor),
+    db: Session = Depends(get_db),
+):
+    upload = db.query(ContentUpload).filter(ContentUpload.id == upload_id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    if upload.tutor_id != current_tutor.id:
+        raise HTTPException(status_code=403, detail="Upload not owned by tutor")
+
+    status_value = upload.processing_status or "idle"
+    return {
+        "upload_id": upload_id,
+        "status": status_value,
+        "job_id": upload.processing_job_id,
+        "error": upload.processing_error,
+        "processed_at": upload.processed_at,
+        "async_enabled": bool(settings.ASYNC_QUEUE_ENABLED),
+    }
 
 
 @router.get("/uploads/{upload_id}/items", response_model=list[ItemResponse])
