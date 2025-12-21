@@ -1,0 +1,6 @@
+Integers are whole numbers that can be positive, negative, or zero.
+Examples: -3, -1, 0, 2, 5.
+When adding integers, numbers with the same sign add normally and keep the sign.
+When adding integers with different signs, subtract the smaller absolute value
+from the larger absolute value and keep the sign of the larger absolute value.
+For example: 5 + (-2) = 3, and -7 + 4 = -3.

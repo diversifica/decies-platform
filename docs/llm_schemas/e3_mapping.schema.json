@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "ChunkMapping": {
+      "properties": {
+        "chunk_index": {
+          "title": "Chunk Index",
+          "type": "integer"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "microconcept_match": {
+          "$ref": "#/$defs/MicroconceptMatch"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_index",
+        "microconcept_match",
+        "confidence",
+        "reason"
+      ],
+      "title": "ChunkMapping",
+      "type": "object"
+    },
+    "MappingQuality": {
+      "properties": {
+        "mapping_coverage": {
+          "title": "Mapping Coverage",
+          "type": "number"
+        },
+        "mapping_precision_hint": {
+          "title": "Mapping Precision Hint",
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mapping_coverage",
+        "mapping_precision_hint",
+        "notes"
+      ],
+      "title": "MappingQuality",
+      "type": "object"
+    },
+    "MicroconceptMatch": {
+      "properties": {
+        "microconcept_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Code"
+        },
+        "microconcept_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Id"
+        },
+        "microconcept_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Name"
+        }
+      },
+      "title": "MicroconceptMatch",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "chunk_mappings": {
+      "items": {
+        "$ref": "#/$defs/ChunkMapping"
+      },
+      "title": "Chunk Mappings",
+      "type": "array"
+    },
+    "quality": {
+      "$ref": "#/$defs/MappingQuality"
+    }
+  },
+  "required": [
+    "chunk_mappings",
+    "quality"
+  ],
+  "title": "E3MapResult",
+  "type": "object"
+}

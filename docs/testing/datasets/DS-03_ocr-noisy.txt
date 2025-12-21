@@ -1,0 +1,3 @@
+Th1s t3xt simulates 0CR noise. Some letters are swapped with numbers.
+Words may be broken: knowl edge, con tent, exa mple.
+The goal is to test robustness when the source text is degraded.

@@ -1,0 +1,3 @@
+Some statements can be interpreted in multiple ways.
+Example: "Light objects fall faster than heavy objects."
+The text is intentionally ambiguous to test item validation.

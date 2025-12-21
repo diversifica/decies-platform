@@ -1,0 +1,1 @@
+Short text. Minimal content for testing low coverage.
