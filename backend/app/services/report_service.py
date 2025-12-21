@@ -131,6 +131,14 @@ class ReportService:
             .filter(
                 RecommendationInstance.student_id == student_id,
                 RecommendationInstance.status == RecommendationStatus.PENDING,
+                or_(
+                    RecommendationInstance.subject_id == subject_id,
+                    RecommendationInstance.subject_id.is_(None),
+                ),
+                or_(
+                    RecommendationInstance.term_id == term_id,
+                    RecommendationInstance.term_id.is_(None),
+                ),
             )
             .order_by(RecommendationInstance.priority, RecommendationInstance.generated_at.desc())
             .all()
@@ -154,8 +162,17 @@ class ReportService:
                 RecommendationInstance.student_id == student_id,
                 RecommendationInstance.status == RecommendationStatus.ACCEPTED,
                 or_(
-                    RecommendationInstance.microconcept_id.is_(None),
-                    and_(MicroConcept.subject_id == subject_id, MicroConcept.term_id == term_id),
+                    and_(
+                        RecommendationInstance.subject_id == subject_id,
+                        RecommendationInstance.term_id == term_id,
+                    ),
+                    and_(
+                        RecommendationInstance.subject_id.is_(None),
+                        RecommendationInstance.term_id.is_(None),
+                        RecommendationInstance.microconcept_id.is_not(None),
+                        MicroConcept.subject_id == subject_id,
+                        MicroConcept.term_id == term_id,
+                    ),
                 ),
             )
             .order_by(RecommendationInstance.updated_at.desc())

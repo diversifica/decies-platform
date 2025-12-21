@@ -2,6 +2,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
@@ -68,6 +69,18 @@ def get_student_recommendations(
             selectinload(RecommendationInstance.outcome),
         )
         .filter(RecommendationInstance.student_id == student_id)
+        .filter(
+            or_(
+                RecommendationInstance.subject_id == subject_id,
+                RecommendationInstance.subject_id.is_(None),
+            )
+        )
+        .filter(
+            or_(
+                RecommendationInstance.term_id == term_id,
+                RecommendationInstance.term_id.is_(None),
+            )
+        )
     )
 
     if status_filter != "all":

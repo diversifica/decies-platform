@@ -796,6 +796,8 @@ def test_recommendation_catalog_guardrail_blocks_unknown_rule(db_session, contex
         recommendation_service._create_or_get_recommendation(
             db_session,
             student_id=student.id,
+            subject_id=context["subject"].id,
+            term_id=context["term"].id,
             rule_id="RX99",
             title="Invalid",
             description="Invalid",

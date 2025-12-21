@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.activity import LearningEvent
@@ -166,6 +167,14 @@ class RecommendationOutcomeService:
             .filter(
                 RecommendationInstance.student_id == student_id,
                 RecommendationInstance.status == RecommendationStatus.ACCEPTED,
+                or_(
+                    RecommendationInstance.subject_id == subject_id,
+                    RecommendationInstance.subject_id.is_(None),
+                ),
+                or_(
+                    RecommendationInstance.term_id == term_id,
+                    RecommendationInstance.term_id.is_(None),
+                ),
             )
             .all()
         )
