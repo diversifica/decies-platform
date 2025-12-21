@@ -111,6 +111,19 @@ class RecommendationInstance(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)  # Human readable title
     description: Mapped[str] = mapped_column(Text, nullable=False)  # Description of what to do
 
+    engine_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
+    ruleset_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
+
     evaluation_window_days: Mapped[int] = mapped_column(
         Integer,
         server_default=text("14"),
@@ -229,6 +242,18 @@ class RecommendationOutcome(Base):
     delta_retention: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
     delta_accuracy: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
     delta_hint_rate: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    engine_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
+    ruleset_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
     computed_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=text("CURRENT_TIMESTAMP"),

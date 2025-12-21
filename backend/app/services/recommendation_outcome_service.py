@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.versioning import RECOMMENDATION_ENGINE_VERSION, RECOMMENDATION_RULESET_VERSION
 from app.models.activity import LearningEvent
 from app.models.microconcept import MicroConcept
 from app.models.recommendation import (
@@ -261,6 +262,8 @@ class RecommendationOutcomeService:
                 outcome.delta_mastery = delta_mastery
                 outcome.delta_accuracy = delta_accuracy
                 outcome.delta_hint_rate = delta_hint_rate
+                outcome.engine_version = rec.engine_version or RECOMMENDATION_ENGINE_VERSION
+                outcome.ruleset_version = rec.ruleset_version or RECOMMENDATION_RULESET_VERSION
                 outcome.computed_at = now
                 db.add(outcome)
                 updated += 1
@@ -274,6 +277,8 @@ class RecommendationOutcomeService:
                     delta_mastery=delta_mastery,
                     delta_accuracy=delta_accuracy,
                     delta_hint_rate=delta_hint_rate,
+                    engine_version=rec.engine_version or RECOMMENDATION_ENGINE_VERSION,
+                    ruleset_version=rec.ruleset_version or RECOMMENDATION_RULESET_VERSION,
                     computed_at=now,
                     notes=None,
                 )

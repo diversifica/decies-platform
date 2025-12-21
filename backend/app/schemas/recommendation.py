@@ -53,8 +53,11 @@ class RecommendationInstanceBase(BaseModel):
     rule_id: str
     recommendation_code: str | None = None
     category: Optional[str] = None
+    catalog_version: str | None = None
     priority: str
     status: str
+    engine_version: str
+    ruleset_version: str
     title: str
     description: str
 
@@ -73,6 +76,8 @@ class RecommendationOutcomeResponse(BaseModel):
     delta_retention: float | None = None
     delta_accuracy: float | None = None
     delta_hint_rate: float | None = None
+    engine_version: str
+    ruleset_version: str
     computed_at: datetime
     notes: str | None = None
 

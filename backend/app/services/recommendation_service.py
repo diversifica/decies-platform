@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.versioning import RECOMMENDATION_ENGINE_VERSION, RECOMMENDATION_RULESET_VERSION
 from app.models.activity import ActivitySession, ActivityType, LearningEvent
 from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
@@ -1934,6 +1935,8 @@ class RecommendationService:
             status=RecommendationStatus.PENDING,
             title=title,
             description=description,
+            engine_version=RECOMMENDATION_ENGINE_VERSION,
+            ruleset_version=RECOMMENDATION_RULESET_VERSION,
             generated_at=datetime.utcnow(),
         )
         db.add(new_rec)

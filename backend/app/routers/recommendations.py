@@ -91,16 +91,23 @@ def get_student_recommendations(
         RecommendationInstance.generated_at.desc(),
     ).all()
 
-    codes = {r.rule_id for r in recommendations}
+    codes = {r.recommendation_code or r.rule_id for r in recommendations}
     if codes:
         catalog_rows = (
-            db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+            db.query(
+                RecommendationCatalog.code,
+                RecommendationCatalog.category,
+                RecommendationCatalog.catalog_version,
+            )
             .filter(RecommendationCatalog.code.in_(codes))
             .all()
         )
-        category_by_code = {code: category for code, category in catalog_rows}
+        category_by_code = {code: category for code, category, _version in catalog_rows}
+        catalog_version_by_code = {code: version for code, _category, version in catalog_rows}
         for rec in recommendations:
-            setattr(rec, "category", category_by_code.get(rec.rule_id))
+            code = rec.recommendation_code or rec.rule_id
+            setattr(rec, "category", category_by_code.get(code))
+            setattr(rec, "catalog_version", catalog_version_by_code.get(code))
     return recommendations
 
 
@@ -127,12 +134,12 @@ def get_recommendation(
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
 
-    category = (
-        db.query(RecommendationCatalog.category)
-        .filter(RecommendationCatalog.code == rec.rule_id)
-        .scalar()
-    )
+    code = rec.recommendation_code or rec.rule_id
+    category, catalog_version = db.query(
+        RecommendationCatalog.category, RecommendationCatalog.catalog_version
+    ).filter(RecommendationCatalog.code == code).first() or (None, None)
     setattr(rec, "category", category)
+    setattr(rec, "catalog_version", catalog_version)
 
     student = db.get(Student, rec.student_id)
     if student and student.subject_id:

@@ -34,6 +34,19 @@ class TutorReport(Base):
         nullable=False,
     )
 
+    engine_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
+    ruleset_version: Mapped[str] = mapped_column(
+        String,
+        server_default=text("'V1'"),
+        default="V1",
+        nullable=False,
+    )
+
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     metrics_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     window_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
