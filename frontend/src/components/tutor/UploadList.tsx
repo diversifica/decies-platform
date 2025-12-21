@@ -33,32 +33,28 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
     const [actionLoadingById, setActionLoadingById] = useState<Record<string, boolean>>({});
     const [actionErrorById, setActionErrorById] = useState<Record<string, string>>({});
 
-    const fetchProcessing = useCallback(
-        async (uploadIds?: string[]) => {
-            const ids = uploadIds ?? uploads.map((u) => u.id);
-            if (ids.length === 0) return;
+    const fetchProcessing = useCallback(async (uploadIds: string[]) => {
+        if (uploadIds.length === 0) return;
 
-            const results = await Promise.allSettled(
-                ids.map((id) => api.get(`/content/uploads/${id}/processing`)),
-            );
+        const results = await Promise.allSettled(
+            uploadIds.map((id) => api.get(`/content/uploads/${id}/processing`)),
+        );
 
-            const next: Record<string, ProcessingState> = {};
-            for (let i = 0; i < ids.length; i += 1) {
-                const id = ids[i];
-                const res = results[i];
-                if (res.status === 'fulfilled') {
-                    next[id] = {
-                        status: (res.value.data.status || 'idle') as ProcessingStatus,
-                        job_id: res.value.data.job_id ?? null,
-                        error: res.value.data.error ?? null,
-                        processed_at: res.value.data.processed_at ?? null,
-                    };
-                }
+        const next: Record<string, ProcessingState> = {};
+        for (let i = 0; i < uploadIds.length; i += 1) {
+            const id = uploadIds[i];
+            const res = results[i];
+            if (res.status === 'fulfilled') {
+                next[id] = {
+                    status: (res.value.data.status || 'idle') as ProcessingStatus,
+                    job_id: res.value.data.job_id ?? null,
+                    error: res.value.data.error ?? null,
+                    processed_at: res.value.data.processed_at ?? null,
+                };
             }
-            setProcessingById((prev) => ({ ...prev, ...next }));
-        },
-        [uploads],
-    );
+        }
+        setProcessingById((prev) => ({ ...prev, ...next }));
+    }, []);
 
     const fetchUploads = useCallback(async () => {
         try {
@@ -114,7 +110,7 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
         if (!shouldPoll) return undefined;
 
         const handle = window.setInterval(() => {
-            fetchProcessing();
+            fetchProcessing(uploads.map((u) => u.id));
         }, 5000);
         return () => window.clearInterval(handle);
     }, [fetchProcessing, uploads, processingById]);
