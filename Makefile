@@ -58,7 +58,7 @@ migration: ## Crea nueva migración Alembic
 	cd $(BACKEND_DIR) && alembic revision --autogenerate -m "$$msg"
 
 export-openapi: ## Exporta especificación OpenAPI
-	cd $(BACKEND_DIR) && python -c "from app.main import app; import json; print(json.dumps(app.openapi()))" > ../docs/openapi.json
+	cd $(BACKEND_DIR) && python -c "from app.main import app; import json; from pathlib import Path; Path('../docs/openapi.json').write_bytes(json.dumps(app.openapi()).encode('utf-8'))"
 	@echo "✅ OpenAPI spec exported to docs/openapi.json"
 
 export-llm-schemas: ## Exporta schemas LLM a docs/llm_schemas
@@ -72,3 +72,4 @@ clean: ## Limpia archivos temporales
 	find . -type f -name "*.pyc" -delete
 	cd $(FRONTEND_DIR) && rm -rf .next
 	@echo "✅ Cleaned temporary files"
+

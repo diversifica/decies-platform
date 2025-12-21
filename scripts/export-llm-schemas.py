@@ -27,7 +27,8 @@ def main() -> int:
     for filename, model in schemas.items():
         schema = model.model_json_schema()
         path = out_dir / filename
-        path.write_text(json.dumps(schema, indent=2, sort_keys=True), encoding="utf-8")
+        payload = json.dumps(schema, indent=2, sort_keys=True)
+        path.write_bytes(payload.encode("utf-8"))
 
     return 0
 
