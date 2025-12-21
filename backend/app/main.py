@@ -13,6 +13,7 @@ from app.api.v1 import auth, events
 from app.core.db import get_db
 from app.routers import (
     activity,
+    admin,
     catalog,
     content,
     grades,
@@ -38,6 +39,7 @@ app.include_router(recommendations.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(grades.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 
 # CORS middleware
 app.add_middleware(

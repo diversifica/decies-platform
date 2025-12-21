@@ -45,6 +45,12 @@ def seed_db():
             db.add(role_student)
             logger.info("Created Role: student")
 
+        role_admin = db.query(Role).filter_by(name="admin").first()
+        if not role_admin:
+            role_admin = Role(id=uuid.uuid4(), name="admin", description="Admin Role")
+            db.add(role_admin)
+            logger.info("Created Role: admin")
+
         db.commit()
 
         # 2. Create Tutor User
@@ -93,6 +99,26 @@ def seed_db():
         elif not user_student.hashed_password.startswith("$pbkdf2-sha256$"):
             user_student.hashed_password = get_password_hash(default_password)
             logger.info("Updated Student password hash")
+
+        db.commit()
+
+        # 3b. Create Admin User
+        admin_email = "admin@decies.com"
+        user_admin = db.query(User).filter_by(email=admin_email).first()
+        if not user_admin:
+            user_admin = User(
+                id=uuid.uuid4(),
+                email=admin_email,
+                hashed_password=get_password_hash(default_password),
+                full_name="Admin Decies",
+                role_id=role_admin.id,
+                is_active=True,
+            )
+            db.add(user_admin)
+            logger.info(f"Created User: {admin_email}")
+        elif not user_admin.hashed_password.startswith("$pbkdf2-sha256$"):
+            user_admin.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Admin password hash")
 
         db.commit()
 
