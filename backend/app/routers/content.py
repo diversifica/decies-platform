@@ -20,6 +20,7 @@ from app.core.deps import (
     get_current_student,
     get_current_tutor,
 )
+from app.core.queue import enqueue_upload_processing, is_async_queue_enabled
 from app.models.content import ContentUpload, ContentUploadType
 from app.models.item import Item
 from app.models.subject import Subject
@@ -136,6 +137,13 @@ def process_upload(
     # Simplest for now: The task connects to DB itself.
 
     # I'll update `process_content_upload` to create its own session using `SessionLocal`.
+
+    if is_async_queue_enabled():
+        try:
+            job_id = enqueue_upload_processing(upload_id=upload_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=503, detail=f"Queue unavailable: {e}") from e
+        return {"message": "Processing enqueued", "upload_id": upload_id, "job_id": job_id}
 
     background_tasks.add_task(run_pipeline_task, upload_id)
     return {"message": "Processing started", "upload_id": upload_id}

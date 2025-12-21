@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_role_name, get_current_student
+from app.core.queue import enqueue_recalculate_metrics, is_async_queue_enabled
 from app.models.activity import (
     ActivitySession,
     ActivitySessionItem,
@@ -750,14 +751,24 @@ def end_session(
     db.commit()
     db.refresh(session)
 
-    # Trigger metrics recalculation (async in production, sync for MVP)
-    try:
-        metric_service.recalculate_and_save_metrics(
-            db, session.student_id, session.subject_id, session.term_id
-        )
-    except Exception as e:
-        # Log error but don't fail the request
-        print(f"Error recalculating metrics: {e}")
+    if is_async_queue_enabled():
+        try:
+            enqueue_recalculate_metrics(
+                student_id=session.student_id,
+                subject_id=session.subject_id,
+                term_id=session.term_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"Queue unavailable (metrics): {e}")
+    else:
+        # Trigger metrics recalculation (async in production, sync for MVP)
+        try:
+            metric_service.recalculate_and_save_metrics(
+                db, session.student_id, session.subject_id, session.term_id
+            )
+        except Exception as e:
+            # Log error but don't fail the request
+            print(f"Error recalculating metrics: {e}")
 
     return session
 
