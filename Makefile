@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-restart db-reset test lint lint-fix install clean
+.PHONY: help dev-up dev-down dev-restart db-reset test lint lint-fix install clean export-llm-schemas
 
 # Variables
 DOCKER_COMPOSE = docker compose -f docker-compose.dev.yml
@@ -60,6 +60,10 @@ migration: ## Crea nueva migración Alembic
 export-openapi: ## Exporta especificación OpenAPI
 	cd $(BACKEND_DIR) && python -c "from app.main import app; import json; print(json.dumps(app.openapi()))" > ../docs/openapi.json
 	@echo "✅ OpenAPI spec exported to docs/openapi.json"
+
+export-llm-schemas: ## Exporta schemas LLM a docs/llm_schemas
+	python scripts/export-llm-schemas.py
+	@echo "✅ LLM schemas exported to docs/llm_schemas"
 
 clean: ## Limpia archivos temporales
 	find . -type d -name "__pycache__" -exec rm -rf {} +

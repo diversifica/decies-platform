@@ -42,6 +42,12 @@ Desde la raíz del repositorio:
   powershell -ExecutionPolicy Bypass -File .\scripts\ps\db-seed.ps1
   ```
 
+* Exportar schemas LLM:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\ps\export-llm-schemas.ps1
+  ```
+
 ## Credenciales seed (dev)
 
 * Tutor: `tutor@decies.com` / `decies`

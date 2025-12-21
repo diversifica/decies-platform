@@ -1,0 +1,4 @@
+In Spanish, words can carry an accent mark to indicate stress or disambiguation.
+For example, "tu" (your) is different from "tu" with accent ("tu" vs "tu").
+The goal is to apply spelling rules consistently and identify common errors.
+Practice: detect missing accents and incorrect capitalization in a paragraph.

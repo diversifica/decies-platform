@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "chunks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Chunks",
+      "type": "array"
+    },
+    "quality": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary",
+    "chunks"
+  ],
+  "title": "StructureResult",
+  "type": "object"
+}

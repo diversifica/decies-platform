@@ -1,0 +1,187 @@
+{
+  "$defs": {
+    "CanonicalItem": {
+      "properties": {
+        "correct_answer": {
+          "title": "Correct Answer",
+          "type": "string"
+        },
+        "difficulty": {
+          "default": 1.0,
+          "title": "Difficulty",
+          "type": "number"
+        },
+        "explanation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Explanation"
+        },
+        "item_type": {
+          "title": "Item Type",
+          "type": "string"
+        },
+        "microconcept_ref": {
+          "$ref": "#/$defs/ItemMicroconceptRef"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "source_chunk_index": {
+          "title": "Source Chunk Index",
+          "type": "integer"
+        },
+        "stem": {
+          "title": "Stem",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_type",
+        "stem",
+        "correct_answer",
+        "microconcept_ref",
+        "source_chunk_index"
+      ],
+      "title": "CanonicalItem",
+      "type": "object"
+    },
+    "E5Quality": {
+      "properties": {
+        "dropped": {
+          "title": "Dropped",
+          "type": "integer"
+        },
+        "fixed": {
+          "title": "Fixed",
+          "type": "integer"
+        },
+        "kept": {
+          "title": "Kept",
+          "type": "integer"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kept",
+        "fixed",
+        "dropped",
+        "notes"
+      ],
+      "title": "E5Quality",
+      "type": "object"
+    },
+    "ItemMicroconceptRef": {
+      "properties": {
+        "microconcept_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Code"
+        },
+        "microconcept_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Id"
+        },
+        "microconcept_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Microconcept Name"
+        }
+      },
+      "title": "ItemMicroconceptRef",
+      "type": "object"
+    },
+    "ValidatedItem": {
+      "properties": {
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "item": {
+          "$ref": "#/$defs/CanonicalItem"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "status",
+        "reason",
+        "item"
+      ],
+      "title": "ValidatedItem",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "quality": {
+      "$ref": "#/$defs/E5Quality"
+    },
+    "validated_items": {
+      "items": {
+        "$ref": "#/$defs/ValidatedItem"
+      },
+      "title": "Validated Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "validated_items",
+    "quality"
+  ],
+  "title": "E5ValidationResult",
+  "type": "object"
+}
