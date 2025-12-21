@@ -80,4 +80,5 @@ class MasteryStateSummary(BaseModel):
     mastery_score: float
     status: str
     last_practice_at: datetime | None
+    recommended_next_review_at: datetime | None = None
     total_events: int

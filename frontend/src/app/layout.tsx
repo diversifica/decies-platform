@@ -26,6 +26,7 @@ export default function RootLayout({
                             <a href="/" style={{ color: 'var(--text-secondary)' }}>Home</a>
                             <a href="/tutor" style={{ color: 'var(--text-secondary)' }}>Tutor</a>
                             <a href="/student" style={{ color: 'var(--text-secondary)' }}>Estudiante</a>
+                            <a href="/admin" style={{ color: 'var(--text-secondary)' }}>Admin</a>
                         </div>
                     </div>
                 </nav>

@@ -1,22 +1,28 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../services/api';
 
-export default function UploadForm() {
+interface UploadFormProps {
+    subjectId?: string;
+    termId?: string;
+    onUploadSuccess?: () => void;
+}
+
+export default function UploadForm({ subjectId: subjectIdProp = '', termId: termIdProp = '', onUploadSuccess }: UploadFormProps) {
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
-    // Preliminary hardcoded IDs or inputs - For MVP Day 3 we assume user knows them or we default
-    // Ideally these come from Auth context or Dropdowns
-    const [tutorId, setTutorId] = useState('');
-    const [subjectId, setSubjectId] = useState('');
-    const [termId, setTermId] = useState('');
+    const [subjectId, setSubjectId] = useState(subjectIdProp);
+    const [termId, setTermId] = useState(termIdProp);
+
+    useEffect(() => setSubjectId(subjectIdProp), [subjectIdProp]);
+    useEffect(() => setTermId(termIdProp), [termIdProp]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!file || !tutorId || !subjectId || !termId) {
+        if (!file || !subjectId || !termId) {
             setMessage("Por favor completa todos los campos");
             return;
         }
@@ -26,23 +32,26 @@ export default function UploadForm() {
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('tutor_id', tutorId);
         formData.append('subject_id', subjectId);
         formData.append('term_id', termId);
         // Defaults
         formData.append('upload_type', 'pdf');
-        formData.append('page_count', '1');
 
         try {
-            const res = await api.post('/content/uploads/', formData, {
+            const res = await api.post('/content/uploads', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             setMessage(`Subida exitosa: ID ${res.data.id}`);
             setFile(null);
-            // Trigger refresh?
+            onUploadSuccess?.();
         } catch (error: any) {
             console.error(error);
-            setMessage(`Error: ${error.response?.data?.detail || error.message}`);
+            const detail = error.response?.data?.detail;
+            if (detail === 'Not enough permissions') {
+                setMessage('Error: necesitas iniciar sesión como tutor.');
+            } else {
+                setMessage(`Error: ${detail || error.message}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -64,17 +73,6 @@ export default function UploadForm() {
                 </label>
 
                 <label>
-                    Tutor ID
-                    <input
-                        type="text"
-                        value={tutorId}
-                        onChange={e => setTutorId(e.target.value)}
-                        placeholder="UUID..."
-                        className="input"
-                    />
-                </label>
-
-                <label>
                     Subject ID
                     <input
                         type="text"
@@ -82,6 +80,7 @@ export default function UploadForm() {
                         onChange={e => setSubjectId(e.target.value)}
                         placeholder="UUID..."
                         className="input"
+                        disabled={!!subjectIdProp}
                     />
                 </label>
 
@@ -93,6 +92,7 @@ export default function UploadForm() {
                         onChange={e => setTermId(e.target.value)}
                         placeholder="UUID..."
                         className="input"
+                        disabled={!!termIdProp}
                     />
                 </label>
 

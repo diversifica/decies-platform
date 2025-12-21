@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,7 +9,7 @@ from app.models.item import ItemType
 class ItemBase(BaseModel):
     type: ItemType
     stem: str
-    options: Optional[List[str]] = None
+    options: Any | None = None
     # correct_answer should be hidden potentially if we want server-side grading
     # But for MVP immediate feedback:
     correct_answer: str
@@ -23,5 +23,11 @@ class ItemCreate(ItemBase):
 class ItemResponse(ItemBase):
     id: uuid.UUID
     content_upload_id: uuid.UUID
+    microconcept_id: uuid.UUID | None = None
+    is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ItemActivationUpdate(BaseModel):
+    is_active: bool

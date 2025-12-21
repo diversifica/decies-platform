@@ -23,6 +23,19 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: decies-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - decies-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -30,6 +43,7 @@ services:
     container_name: decies-backend
     environment:
       DATABASE_URL: postgresql+psycopg2://decies:decies@db:5432/decies
+      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
     ports:
@@ -42,7 +56,40 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: decies-worker
+    environment:
+      DATABASE_URL: postgresql+psycopg2://decies:decies@db:5432/decies
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    networks:
+      - decies-network
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.worker
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, redis; r=redis.from_url(os.environ.get('REDIS_URL','redis://redis:6379/0')); r.ping(); print('ok')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:

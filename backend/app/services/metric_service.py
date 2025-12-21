@@ -11,6 +11,32 @@ from app.models.microconcept import MicroConcept
 class MetricService:
     """Service for calculating student metrics and mastery states"""
 
+    def _compute_recommended_next_review_at(
+        self,
+        *,
+        now: datetime,
+        last_practice_at: datetime | None,
+        status: str,
+        mastery_score: float,
+    ) -> datetime:
+        if last_practice_at is None:
+            return now
+
+        status_key = (status or "").casefold()
+        if status_key == "dominant":
+            interval_days = 14
+        elif status_key == "in_progress":
+            interval_days = 7
+        else:
+            interval_days = 2
+
+        if mastery_score < 0.2:
+            interval_days = min(interval_days, 1)
+        elif mastery_score >= 0.9:
+            interval_days = max(interval_days, 21)
+
+        return last_practice_at + timedelta(days=interval_days)
+
     def calculate_student_metrics(
         self,
         db: Session,
@@ -124,6 +150,7 @@ class MetricService:
         - in_progress: 0.5 <= mastery_score < 0.8
         - at_risk: mastery_score < 0.5
         """
+        now = datetime.utcnow()
         # Get all microconcepts for this subject/term
         microconcepts = (
             db.query(MicroConcept)
@@ -151,14 +178,22 @@ class MetricService:
 
             if not events:
                 # No practice yet, create default state
+                status = "at_risk"
+                mastery_score = 0.0
                 mastery_states.append(
                     MasteryState(
                         student_id=student_id,
                         microconcept_id=mc.id,
-                        mastery_score=0.0,
-                        status="at_risk",
+                        mastery_score=mastery_score,
+                        status=status,
                         last_practice_at=None,
-                        updated_at=datetime.utcnow(),
+                        recommended_next_review_at=self._compute_recommended_next_review_at(
+                            now=now,
+                            last_practice_at=None,
+                            status=status,
+                            mastery_score=mastery_score,
+                        ),
+                        updated_at=now,
                     )
                 )
                 continue
@@ -173,7 +208,7 @@ class MetricService:
 
             # Recency factor: more recent practice = higher score
             last_practice = events[0].timestamp_start
-            days_since_practice = (datetime.utcnow() - last_practice).days
+            days_since_practice = (now - last_practice).days
             recency_factor = max(0.5, 1.0 - (days_since_practice / 30.0))
 
             # Calculate mastery score
@@ -194,7 +229,13 @@ class MetricService:
                     mastery_score=round(mastery_score, 4),
                     status=status,
                     last_practice_at=last_practice,
-                    updated_at=datetime.utcnow(),
+                    recommended_next_review_at=self._compute_recommended_next_review_at(
+                        now=now,
+                        last_practice_at=last_practice,
+                        status=status,
+                        mastery_score=mastery_score,
+                    ),
+                    updated_at=now,
                 )
             )
 
@@ -259,6 +300,7 @@ class MetricService:
                 existing_ms.mastery_score = ms.mastery_score
                 existing_ms.status = ms.status
                 existing_ms.last_practice_at = ms.last_practice_at
+                existing_ms.recommended_next_review_at = ms.recommended_next_review_at
                 existing_ms.updated_at = ms.updated_at
 
                 # Update the object in our list so it has the ID

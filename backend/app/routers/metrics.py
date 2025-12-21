@@ -4,8 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.deps import get_current_active_user, get_current_role_name, get_current_student
 from app.models.metric import MasteryState, MetricAggregate
 from app.models.microconcept import MicroConcept
+from app.models.subject import Subject
+from app.models.user import User
 from app.schemas.metric import (
     MasteryStateSummary,
     StudentMetricsSummary,
@@ -21,10 +24,25 @@ def get_student_metrics(
     subject_id: uuid.UUID,
     term_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get aggregated metrics for a student in a subject/term.
     """
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if student_id != student.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        if student.subject_id and student.subject_id != subject_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif role_name == "tutor":
+        subject = db.get(Subject, subject_id)
+        if subject and subject.tutor_id and subject.tutor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
     # Get latest metric aggregate
     metric = (
         db.query(MetricAggregate)
@@ -87,10 +105,25 @@ def get_student_mastery(
     subject_id: uuid.UUID,
     term_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get mastery states for all microconcepts for a student.
     """
+    role_name = get_current_role_name(db, current_user)
+    if role_name == "student":
+        student = get_current_student(db=db, current_user=current_user)
+        if student_id != student.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        if student.subject_id and student.subject_id != subject_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif role_name == "tutor":
+        subject = db.get(Subject, subject_id)
+        if subject and subject.tutor_id and subject.tutor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        raise HTTPException(status_code=403, detail="Role not allowed")
+
     # Get mastery states
     mastery_states = (
         db.query(MasteryState)
@@ -126,6 +159,7 @@ def get_student_mastery(
             db.query(LearningEvent)
             .filter(
                 LearningEvent.student_id == student_id,
+                LearningEvent.subject_id == subject_id,
                 LearningEvent.microconcept_id == ms.microconcept_id,
             )
             .count()
@@ -138,6 +172,7 @@ def get_student_mastery(
                 mastery_score=ms.mastery_score,
                 status=ms.status,
                 last_practice_at=ms.last_practice_at,
+                recommended_next_review_at=ms.recommended_next_review_at,
                 total_events=event_count,
             )
         )
@@ -151,10 +186,18 @@ def recalculate_metrics(
     subject_id: uuid.UUID,
     term_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Manually trigger metrics recalculation (admin/debug endpoint).
     """
+    role_name = get_current_role_name(db, current_user)
+    if role_name != "tutor":
+        raise HTTPException(status_code=403, detail="Role not allowed")
+    subject = db.get(Subject, subject_id)
+    if subject and subject.tutor_id and subject.tutor_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
     try:
         metrics, mastery_states = metric_service.recalculate_and_save_metrics(
             db, student_id, subject_id, term_id

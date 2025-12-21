@@ -1,15 +1,23 @@
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.main import app
-from app.models.activity import ActivityType
-from app.models.item import Item
+from app.models.activity import ActivitySession, ActivitySessionItem, ActivityType
+from app.models.content import ContentUpload, ContentUploadType
+from app.models.item import Item, ItemType
+from app.models.metric import MasteryState
+from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
+from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import Term
+from app.models.tutor import Tutor
+from app.models.user import User
 
 client = TestClient(app)
 
@@ -25,13 +33,25 @@ def db_session():
 
 def test_create_activity_session(db_session):
     """Test creating an activity session"""
-    # Get existing data from seed
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
 
-    assert student is not None
     assert subject is not None
     assert term is not None
     assert activity_type is not None
@@ -48,6 +68,51 @@ def test_create_activity_session(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "in_progress"
+    assert data["student_id"] == str(student.id)
+
+
+def test_create_exam_style_activity_session(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="EXAM_STYLE").first()
+
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+
+    response = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 5,
+            "device_type": "web",
+        },
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -58,12 +123,58 @@ def test_create_activity_session(db_session):
 
 def test_record_learning_event(db_session):
     """Test recording a learning event"""
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
     # Create a session first
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
-    item = db_session.query(Item).first()
+    tutor = db_session.query(Tutor).first()
+    assert tutor is not None
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        tutor_id=tutor.id,
+        student_id=student.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        topic_id=None,
+        upload_type=ContentUploadType.pdf,
+        storage_uri="/test/event_test.pdf",
+        file_name="event_test.pdf",
+        mime_type="application/pdf",
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    item = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=None,
+        type=ItemType.MCQ,
+        stem="Test question",
+        options={"options": ["A", "B", "C"]},
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.commit()
 
     session_response = client.post(
         "/api/v1/activities/sessions",
@@ -76,6 +187,7 @@ def test_record_learning_event(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
     )
     session_id = session_response.json()["id"]
 
@@ -93,15 +205,16 @@ def test_record_learning_event(db_session):
             "topic_id": None,
             "microconcept_id": None,
             "activity_type_id": str(activity_type.id),
-            "is_correct": True,
+            "is_correct": False,
             "duration_ms": 5000,
             "attempt_number": 1,
-            "response_normalized": "Test answer",
+            "response_normalized": "A",
             "hint_used": None,
             "difficulty_at_time": None,
             "timestamp_start": start_time.isoformat(),
             "timestamp_end": end_time.isoformat(),
         },
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -112,9 +225,23 @@ def test_record_learning_event(db_session):
 
 def test_end_session(db_session):
     """Test ending a session and triggering metrics recalculation"""
-    student = db_session.query(Student).first()
-    subject = db_session.query(Subject).first()
-    term = db_session.query(Term).first()
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
     activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
 
     # Create session
@@ -129,11 +256,12 @@ def test_end_session(db_session):
             "item_count": 5,
             "device_type": "web",
         },
+        headers=headers,
     )
     session_id = session_response.json()["id"]
 
     # End session
-    response = client.post(f"/api/v1/activities/sessions/{session_id}/end")
+    response = client.post(f"/api/v1/activities/sessions/{session_id}/end", headers=headers)
 
     assert response.status_code == 200
     data = response.json()
@@ -149,3 +277,705 @@ def test_list_activity_types(db_session):
     data = response.json()
     assert len(data) >= 3  # QUIZ, MATCH, REVIEW from seed
     assert any(t["code"] == "QUIZ" for t in data)
+    assert any(t["code"] == "EXAM_STYLE" for t in data)
+    assert any(t["code"] == "REVIEW" for t in data)
+
+
+def test_review_session_prioritizes_due_microconcepts(db_session):
+    role_student = db_session.query(Role).filter_by(name="Student").first()
+    if not role_student:
+        role_student = Role(name="Student")
+        db_session.add(role_student)
+
+    role_tutor = db_session.query(Role).filter_by(name="Tutor").first()
+    if not role_tutor:
+        role_tutor = Role(name="Tutor")
+        db_session.add(role_tutor)
+
+    db_session.commit()
+
+    uid = uuid.uuid4()
+    password = "pw"
+
+    tutor_user = User(
+        id=uuid.uuid4(),
+        email=f"t_review_{uid}@example.com",
+        hashed_password=get_password_hash(password),
+        is_active=True,
+        role_id=role_tutor.id,
+    )
+    student_user = User(
+        id=uuid.uuid4(),
+        email=f"s_review_{uid}@example.com",
+        hashed_password=get_password_hash(password),
+        is_active=True,
+        role_id=role_student.id,
+    )
+    db_session.add_all([tutor_user, student_user])
+    db_session.flush()
+
+    tutor = Tutor(user_id=tutor_user.id, display_name="Tutor Review")
+    db_session.add(tutor)
+    db_session.flush()
+
+    term = db_session.query(Term).filter_by(code="T1").first()
+    assert term is not None
+
+    subject = Subject(name=f"Subject Review {uid}", tutor_id=tutor_user.id)
+    db_session.add(subject)
+    db_session.flush()
+
+    student = Student(user_id=student_user.id, subject_id=subject.id)
+    db_session.add(student)
+    db_session.flush()
+
+    review_type = db_session.query(ActivityType).filter_by(code="REVIEW").first()
+    if not review_type:
+        review_type = ActivityType(id=uuid.uuid4(), code="REVIEW", name="Review", active=True)
+        db_session.add(review_type)
+        db_session.flush()
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="review.pdf",
+        storage_uri="/test/review.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    mc_due = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="MC-DUE",
+        name="Due",
+        description="due",
+        active=True,
+    )
+    mc_not_due = MicroConcept(
+        subject_id=subject.id,
+        term_id=term.id,
+        code="MC-NOTDUE",
+        name="Not due",
+        description="not due",
+        active=True,
+    )
+    db_session.add_all([mc_due, mc_not_due])
+    db_session.flush()
+
+    due_item_1 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_due.id,
+        type=ItemType.MCQ,
+        stem="Due 1",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    due_item_2 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_due.id,
+        type=ItemType.MCQ,
+        stem="Due 2",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    not_due_item_1 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_not_due.id,
+        type=ItemType.MCQ,
+        stem="NotDue 1",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    not_due_item_2 = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc_not_due.id,
+        type=ItemType.MCQ,
+        stem="NotDue 2",
+        options=["A", "B"],
+        correct_answer="A",
+        explanation="",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add_all([due_item_1, due_item_2, not_due_item_1, not_due_item_2])
+
+    now = datetime.utcnow()
+    due_ms = MasteryState(
+        student_id=student.id,
+        microconcept_id=mc_due.id,
+        mastery_score=0.9,
+        status="dominant",
+        last_practice_at=now - timedelta(days=10),
+        recommended_next_review_at=now - timedelta(days=1),
+        updated_at=now,
+    )
+    not_due_ms = MasteryState(
+        student_id=student.id,
+        microconcept_id=mc_not_due.id,
+        mastery_score=0.1,
+        status="at_risk",
+        last_practice_at=now - timedelta(days=1),
+        recommended_next_review_at=now + timedelta(days=30),
+        updated_at=now,
+    )
+    db_session.add_all([due_ms, not_due_ms])
+    db_session.commit()
+
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": student_user.email, "password": password},
+    )
+    assert token_res.status_code == 200
+    headers = {"Authorization": f"Bearer {token_res.json()['access_token']}"}
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(review_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 3,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = session_res.json()["id"]
+
+    session_items_res = client.get(
+        f"/api/v1/activities/sessions/{session_id}/items",
+        headers=headers,
+    )
+    assert session_items_res.status_code == 200
+    items = session_items_res.json()
+    assert len(items) == 3
+    assert items[0]["microconcept_id"] == str(mc_due.id)
+    assert items[1]["microconcept_id"] == str(mc_due.id)
+
+
+def test_create_activity_session_adaptive_selection_prioritizes_at_risk(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    tutor = db_session.query(Tutor).first()
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+    assert tutor is not None
+
+    microconcepts = (
+        db_session.query(MicroConcept)
+        .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+        .order_by(MicroConcept.code.asc())
+        .limit(3)
+        .all()
+    )
+    assert len(microconcepts) == 3
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="adaptive_selection_test.pdf",
+        storage_uri="/test/adaptive_selection_test.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    for idx, mc in enumerate(microconcepts):
+        for j in range(3):
+            item = Item(
+                id=uuid.uuid4(),
+                content_upload_id=upload.id,
+                microconcept_id=mc.id,
+                type=ItemType.MCQ,
+                stem=f"Pregunta adaptativa {idx}-{j}",
+                options=["A", "B", "C", "D"],
+                correct_answer="A",
+                explanation="",
+                difficulty=1,
+                is_active=True,
+            )
+            db_session.add(item)
+
+    # Mastery setup:
+    # - First microconcept at_risk
+    # - Second in_progress
+    # - Third dominant (should be de-prioritized)
+    now = datetime.utcnow()
+    statuses = ["at_risk", "in_progress", "dominant"]
+    scores = [0.2, 0.6, 0.9]
+    for mc, status, score in zip(microconcepts, statuses, scores, strict=True):
+        existing = (
+            db_session.query(MasteryState)
+            .filter(MasteryState.student_id == student.id, MasteryState.microconcept_id == mc.id)
+            .first()
+        )
+        if existing:
+            existing.status = status
+            existing.mastery_score = score
+            existing.updated_at = now
+            existing.last_practice_at = now
+        else:
+            db_session.add(
+                MasteryState(
+                    id=uuid.uuid4(),
+                    student_id=student.id,
+                    microconcept_id=mc.id,
+                    mastery_score=score,
+                    status=status,
+                    last_practice_at=now,
+                    updated_at=now,
+                    metrics_version="V1",
+                )
+            )
+
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 6,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    session_id = uuid.UUID(response.json()["id"])
+
+    selected = (
+        db_session.query(Item)
+        .join(ActivitySessionItem, ActivitySessionItem.item_id == Item.id)
+        .filter(ActivitySessionItem.session_id == session_id)
+        .order_by(ActivitySessionItem.order_index.asc())
+        .all()
+    )
+    assert len(selected) == 6
+    selected_microconcepts = [i.microconcept_id for i in selected]
+
+    assert microconcepts[0].id in selected_microconcepts[:3]
+    assert microconcepts[1].id in selected_microconcepts[:3]
+
+    counts: dict[uuid.UUID, int] = {}
+    for mcid in selected_microconcepts:
+        assert mcid is not None
+        counts[mcid] = counts.get(mcid, 0) + 1
+
+    assert max(counts.values()) <= 2
+
+
+def test_create_activity_session_adaptive_selection_includes_prerequisites(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    tutor = db_session.query(Tutor).first()
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+    assert tutor is not None
+
+    mc_target = MicroConcept(
+        id=uuid.uuid4(),
+        subject_id=subject.id,
+        term_id=term.id,
+        code=f"MC-TARGET-{uuid.uuid4()}",
+        name="Target",
+        description="Target concept",
+        active=True,
+    )
+    mc_prereq = MicroConcept(
+        id=uuid.uuid4(),
+        subject_id=subject.id,
+        term_id=term.id,
+        code=f"MC-PREREQ-{uuid.uuid4()}",
+        name="Prereq",
+        description="Prerequisite concept",
+        active=True,
+    )
+    mc_other = MicroConcept(
+        id=uuid.uuid4(),
+        subject_id=subject.id,
+        term_id=term.id,
+        code=f"MC-OTHER-{uuid.uuid4()}",
+        name="Other",
+        description="Other concept",
+        active=True,
+    )
+    mc_dominant = MicroConcept(
+        id=uuid.uuid4(),
+        subject_id=subject.id,
+        term_id=term.id,
+        code=f"MC-DOM-{uuid.uuid4()}",
+        name="Dominant",
+        description="Dominant concept",
+        active=True,
+    )
+    db_session.add_all([mc_target, mc_prereq, mc_other, mc_dominant])
+    db_session.flush()
+
+    db_session.add(
+        MicroConceptPrerequisite(
+            id=uuid.uuid4(),
+            microconcept_id=mc_target.id,
+            prerequisite_microconcept_id=mc_prereq.id,
+        )
+    )
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="adaptive_selection_prereq_test.pdf",
+        storage_uri="/test/adaptive_selection_prereq_test.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    for idx, mc in enumerate([mc_target, mc_prereq, mc_other, mc_dominant]):
+        for j in range(3):
+            db_session.add(
+                Item(
+                    id=uuid.uuid4(),
+                    content_upload_id=upload.id,
+                    microconcept_id=mc.id,
+                    type=ItemType.MCQ,
+                    stem=f"Pregunta prereq {idx}-{j}",
+                    options=["A", "B", "C", "D"],
+                    correct_answer="A",
+                    explanation="",
+                    difficulty=1,
+                    is_active=True,
+                )
+            )
+
+    now = datetime.utcnow()
+    db_session.add_all(
+        [
+            MasteryState(
+                id=uuid.uuid4(),
+                student_id=student.id,
+                microconcept_id=mc_target.id,
+                mastery_score=0.2,
+                status="at_risk",
+                last_practice_at=now,
+                updated_at=now,
+                metrics_version="V1",
+            ),
+            MasteryState(
+                id=uuid.uuid4(),
+                student_id=student.id,
+                microconcept_id=mc_prereq.id,
+                mastery_score=0.3,
+                status="at_risk",
+                last_practice_at=now,
+                updated_at=now,
+                metrics_version="V1",
+            ),
+            MasteryState(
+                id=uuid.uuid4(),
+                student_id=student.id,
+                microconcept_id=mc_other.id,
+                mastery_score=0.6,
+                status="in_progress",
+                last_practice_at=now,
+                updated_at=now,
+                metrics_version="V1",
+            ),
+            MasteryState(
+                id=uuid.uuid4(),
+                student_id=student.id,
+                microconcept_id=mc_dominant.id,
+                mastery_score=0.9,
+                status="dominant",
+                last_practice_at=now,
+                updated_at=now,
+                metrics_version="V1",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 6,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    session_id = uuid.UUID(response.json()["id"])
+
+    selected = (
+        db_session.query(Item)
+        .join(ActivitySessionItem, ActivitySessionItem.item_id == Item.id)
+        .filter(ActivitySessionItem.session_id == session_id)
+        .order_by(ActivitySessionItem.order_index.asc())
+        .all()
+    )
+    assert len(selected) == 6
+    selected_microconcepts = [i.microconcept_id for i in selected]
+
+    assert mc_prereq.id in selected_microconcepts[:4]
+
+    counts: dict[uuid.UUID, int] = {}
+    for mcid in selected_microconcepts:
+        assert mcid is not None
+        counts[mcid] = counts.get(mcid, 0) + 1
+    assert max(counts.values()) <= 2
+
+
+def test_cloze_activity_session_grades_answer(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    tutor = db_session.query(Tutor).first()
+    assert subject is not None
+    assert term is not None
+    assert tutor is not None
+
+    cloze_type = db_session.query(ActivityType).filter_by(code="CLOZE").first()
+    if not cloze_type:
+        cloze_type = ActivityType(id=uuid.uuid4(), code="CLOZE", name="Cloze", active=True)
+        db_session.add(cloze_type)
+        db_session.commit()
+
+    mc = (
+        db_session.query(MicroConcept)
+        .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+        .order_by(MicroConcept.created_at.asc())
+        .first()
+    )
+    if not mc:
+        mc = MicroConcept(
+            id=uuid.uuid4(),
+            subject_id=subject.id,
+            term_id=term.id,
+            code=f"MC-CLOZE-{uuid.uuid4()}",
+            name="Cloze Concept",
+            description="",
+            active=True,
+        )
+        db_session.add(mc)
+        db_session.flush()
+
+    upload = ContentUpload(
+        id=uuid.uuid4(),
+        file_name="cloze_test.pdf",
+        storage_uri="/test/cloze_test.pdf",
+        mime_type="application/pdf",
+        upload_type=ContentUploadType.pdf,
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        page_count=1,
+    )
+    db_session.add(upload)
+    db_session.flush()
+
+    item = Item(
+        id=uuid.uuid4(),
+        content_upload_id=upload.id,
+        microconcept_id=mc.id,
+        type=ItemType.CLOZE,
+        stem="Completa: 2 + 2 = ____",
+        options={"placeholder": "____"},
+        correct_answer="4",
+        explanation="2 + 2 = 4.",
+        difficulty=1,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(cloze_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 1,
+            "content_upload_id": str(upload.id),
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = uuid.UUID(session_res.json()["id"])
+
+    items_res = client.get(f"/api/v1/activities/sessions/{session_id}/items", headers=headers)
+    assert items_res.status_code == 200
+    session_items = items_res.json()
+    assert len(session_items) == 1
+    assert session_items[0]["type"] == "cloze"
+
+    start_time = datetime.utcnow()
+    end_time = datetime.utcnow()
+    resp_res = client.post(
+        f"/api/v1/activities/sessions/{session_id}/responses",
+        json={
+            "student_id": str(student.id),
+            "item_id": str(item.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "microconcept_id": None,
+            "activity_type_id": str(cloze_type.id),
+            "is_correct": False,
+            "duration_ms": 1000,
+            "attempt_number": 1,
+            "response_normalized": "4",
+            "hint_used": None,
+            "difficulty_at_time": None,
+            "timestamp_start": start_time.isoformat(),
+            "timestamp_end": end_time.isoformat(),
+        },
+        headers=headers,
+    )
+    assert resp_res.status_code == 200
+    assert resp_res.json()["is_correct"] is True
+
+
+def test_submit_activity_session_feedback(db_session):
+    token_res = client.post(
+        "/api/v1/login/access-token",
+        json={"email": "student@decies.com", "password": "decies"},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    student_id = uuid.UUID(me_res.json()["student_id"])
+
+    student = db_session.get(Student, student_id)
+    assert student is not None
+
+    subject = db_session.get(Subject, student.subject_id)
+    term = db_session.query(Term).filter_by(code="T1").first()
+    activity_type = db_session.query(ActivityType).filter_by(code="QUIZ").first()
+    assert subject is not None
+    assert term is not None
+    assert activity_type is not None
+
+    session_res = client.post(
+        "/api/v1/activities/sessions",
+        json={
+            "student_id": str(student.id),
+            "activity_type_id": str(activity_type.id),
+            "subject_id": str(subject.id),
+            "term_id": str(term.id),
+            "topic_id": None,
+            "item_count": 3,
+            "device_type": "web",
+        },
+        headers=headers,
+    )
+    assert session_res.status_code == 200
+    session_id = uuid.UUID(session_res.json()["id"])
+
+    end_res = client.post(f"/api/v1/activities/sessions/{session_id}/end", headers=headers)
+    assert end_res.status_code == 200
+
+    feedback_res = client.post(
+        f"/api/v1/activities/sessions/{session_id}/feedback",
+        json={"rating": 4, "text": "Me gustó la actividad."},
+        headers=headers,
+    )
+    assert feedback_res.status_code == 200
+
+    session = db_session.get(ActivitySession, session_id)
+    assert session is not None
+    assert session.feedback_rating == 4
+    assert session.feedback_text == "Me gustó la actividad."
+    assert session.feedback_submitted_at is not None

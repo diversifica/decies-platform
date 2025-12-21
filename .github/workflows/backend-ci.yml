@@ -30,6 +30,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v6
 
@@ -76,4 +85,4 @@ jobs:
         working-directory: backend
         run: |
           . .venv/bin/activate
-          DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" uv run pytest -q
+          DATABASE_URL="postgresql+psycopg2://decies:decies@localhost:5432/decies" REDIS_URL="redis://localhost:6379/0" uv run pytest -q

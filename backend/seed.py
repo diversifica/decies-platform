@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 import uuid
@@ -7,6 +8,7 @@ from datetime import datetime
 sys.path.append(".")
 
 from app.core.db import SessionLocal
+from app.core.security import get_password_hash
 from app.models.activity import ActivityType
 from app.models.content import ContentUpload
 from app.models.item import Item, ItemType
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 def seed_db():
+    default_password = "decies"
+
     db = SessionLocal()
     try:
         logger.info("Seeding database...")
@@ -41,6 +45,12 @@ def seed_db():
             db.add(role_student)
             logger.info("Created Role: student")
 
+        role_admin = db.query(Role).filter_by(name="admin").first()
+        if not role_admin:
+            role_admin = Role(id=uuid.uuid4(), name="admin", description="Admin Role")
+            db.add(role_admin)
+            logger.info("Created Role: admin")
+
         db.commit()
 
         # 2. Create Tutor User
@@ -50,7 +60,7 @@ def seed_db():
             user_tutor = User(
                 id=uuid.uuid4(),
                 email=tutor_email,
-                hashed_password="hashed_secret_password",  # Dummy hash
+                hashed_password=get_password_hash(default_password),
                 full_name="Profesor Decies",
                 role_id=role_tutor.id,
                 is_active=True,
@@ -58,8 +68,12 @@ def seed_db():
             db.add(user_tutor)
             db.flush()  # Ensure user is pending insertion before tutor refers to it?
             logger.info(f"Created User: {tutor_email}")
+        elif not user_tutor.hashed_password.startswith("$pbkdf2-sha256$"):
+            user_tutor.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Tutor password hash")
 
-            # Create Tutor Profile
+        tutor_profile = db.query(Tutor).filter_by(user_id=user_tutor.id).first()
+        if not tutor_profile:
             tutor_profile = Tutor(
                 id=uuid.uuid4(), user_id=user_tutor.id, display_name="Profesor Decies (Ciencias)"
             )
@@ -75,18 +89,36 @@ def seed_db():
             user_student = User(
                 id=uuid.uuid4(),
                 email=student_email,
-                hashed_password="hashed_secret_password",
+                hashed_password=get_password_hash(default_password),
                 full_name="Alumno Decies",
                 role_id=role_student.id,
                 is_active=True,
             )
             db.add(user_student)
             logger.info(f"Created User: {student_email}")
+        elif not user_student.hashed_password.startswith("$pbkdf2-sha256$"):
+            user_student.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Student password hash")
 
-            # Create Student Profile
-            student_profile = Student(id=user_student.id, enrollment_date=datetime.now())
-            db.add(student_profile)
-            logger.info("Created Student Profile")
+        db.commit()
+
+        # 3b. Create Admin User
+        admin_email = "admin@decies.com"
+        user_admin = db.query(User).filter_by(email=admin_email).first()
+        if not user_admin:
+            user_admin = User(
+                id=uuid.uuid4(),
+                email=admin_email,
+                hashed_password=get_password_hash(default_password),
+                full_name="Admin Decies",
+                role_id=role_admin.id,
+                is_active=True,
+            )
+            db.add(user_admin)
+            logger.info(f"Created User: {admin_email}")
+        elif not user_admin.hashed_password.startswith("$pbkdf2-sha256$"):
+            user_admin.hashed_password = get_password_hash(default_password)
+            logger.info("Updated Admin password hash")
 
         db.commit()
 
@@ -134,10 +166,37 @@ def seed_db():
 
         db.commit()
 
+        # 5b. Ensure Student Profile is linked to tutor subject
+        student_profile = (
+            db.query(Student)
+            .filter((Student.user_id == user_student.id) | (Student.id == user_student.id))
+            .first()
+        )
+        if not student_profile:
+            student_profile = Student(
+                id=user_student.id,
+                user_id=user_student.id,
+                subject_id=subject.id,
+                enrollment_date=datetime.now(),
+            )
+            db.add(student_profile)
+            logger.info("Created Student Profile")
+        else:
+            if not student_profile.user_id:
+                student_profile.user_id = user_student.id
+            if not student_profile.subject_id:
+                student_profile.subject_id = subject.id
+            db.add(student_profile)
+            logger.info("Updated Student Profile links")
+
+        db.commit()
+
         # 6. Create Activity Types (Day 4)
         activity_types_data = [
             ("QUIZ", "Quiz Interactivo"),
+            ("EXAM_STYLE", "Modo Examen"),
             ("MATCH", "Emparejar Conceptos"),
+            ("CLOZE", "Completar Huecos"),
             ("REVIEW", "Revisión Espaciada"),
         ]
 
@@ -177,16 +236,36 @@ def seed_db():
         db.commit()
 
         # 8. Link existing Items to MicroConcepts (Day 4)
-        # Get first microconcept to link items
-        first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
-        if first_mc:
-            items = db.query(Item).filter(Item.microconcept_id.is_(None)).all()
+        # Important: only link items to microconcepts that match the upload scope (subject/term).
+        # Avoid cross-subject links that break mastery calculations.
+        unlinked = (
+            db.query(Item, ContentUpload)
+            .join(ContentUpload, Item.content_upload_id == ContentUpload.id)
+            .filter(Item.microconcept_id.is_(None))
+            .all()
+        )
+        if unlinked:
+            updated = 0
+            for item, upload in unlinked:
+                mc = (
+                    db.query(MicroConcept)
+                    .filter(
+                        MicroConcept.subject_id == upload.subject_id,
+                        MicroConcept.term_id == upload.term_id,
+                        MicroConcept.active == True,  # noqa: E712
+                    )
+                    .order_by(MicroConcept.created_at.asc())
+                    .first()
+                )
+                if not mc:
+                    continue
 
-            for item in items:
-                item.microconcept_id = first_mc.id
-                logger.info(f"Linked Item {item.id} to MicroConcept {first_mc.code}")
+                item.microconcept_id = mc.id
+                updated += 1
+                logger.info(f"Linked Item {item.id} to MicroConcept {mc.code or mc.name}")
 
-            db.commit()
+            if updated:
+                db.commit()
 
         # 9. Create test ContentUpload and Items for CI tests (Day 4)
 
@@ -220,7 +299,7 @@ def seed_db():
                     microconcept_id=first_mc.id if first_mc else None,
                     type=ItemType.MCQ,
                     stem=f"Pregunta de prueba {i + 1}",
-                    options={"choices": ["Opción A", "Opción B", "Opción C", "Opción D"]},
+                    options=["Opción A", "Opción B", "Opción C", "Opción D"],
                     correct_answer="Opción A",
                     explanation=f"Explicación de la pregunta {i + 1}",
                     difficulty=1,
@@ -228,11 +307,109 @@ def seed_db():
                 db.add(item)
                 logger.info(f"Created test Item {i + 1}")
 
+            cloze_item = Item(
+                id=uuid.uuid4(),
+                content_upload_id=test_upload.id,
+                microconcept_id=first_mc.id if first_mc else None,
+                type=ItemType.CLOZE,
+                stem="Completa: 2 + 2 = ____",
+                options={"placeholder": "____"},
+                correct_answer="4",
+                explanation="2 + 2 = 4.",
+                difficulty=1,
+            )
+            db.add(cloze_item)
+            logger.info("Created test CLOZE Item")
+
+            match_mcs = (
+                db.query(MicroConcept)
+                .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+                .order_by(MicroConcept.code.asc())
+                .limit(4)
+                .all()
+            )
+            if len(match_mcs) == 4:
+                pairs = [{"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs]
+                correct_map = {p["left"]: p["right"] for p in pairs}
+                match_item = Item(
+                    id=uuid.uuid4(),
+                    content_upload_id=test_upload.id,
+                    microconcept_id=match_mcs[0].id,
+                    type=ItemType.MATCH,
+                    stem="Empareja cada microconcepto con su descripción",
+                    options={"pairs": pairs},
+                    correct_answer=json.dumps(correct_map, ensure_ascii=False),
+                    explanation="",
+                    difficulty=1,
+                )
+                db.add(match_item)
+                logger.info("Created test MATCH Item")
+
             db.commit()
+        else:
+            existing_cloze = (
+                db.query(Item)
+                .filter(Item.content_upload_id == test_upload.id, Item.type == ItemType.CLOZE)
+                .first()
+            )
+            if not existing_cloze:
+                first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
+                cloze_item = Item(
+                    id=uuid.uuid4(),
+                    content_upload_id=test_upload.id,
+                    microconcept_id=first_mc.id if first_mc else None,
+                    type=ItemType.CLOZE,
+                    stem="Completa: 2 + 2 = ____",
+                    options={"placeholder": "____"},
+                    correct_answer="4",
+                    explanation="2 + 2 = 4.",
+                    difficulty=1,
+                )
+                db.add(cloze_item)
+                db.commit()
+                logger.info("Created missing test CLOZE Item")
+
+            existing_match = (
+                db.query(Item)
+                .filter(
+                    Item.content_upload_id == test_upload.id,
+                    Item.type == ItemType.MATCH,
+                )
+                .first()
+            )
+            if not existing_match:
+                match_mcs = (
+                    db.query(MicroConcept)
+                    .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
+                    .order_by(MicroConcept.code.asc())
+                    .limit(4)
+                    .all()
+                )
+                if len(match_mcs) == 4:
+                    pairs = [
+                        {"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs
+                    ]
+                    correct_map = {p["left"]: p["right"] for p in pairs}
+                    match_item = Item(
+                        id=uuid.uuid4(),
+                        content_upload_id=test_upload.id,
+                        microconcept_id=match_mcs[0].id,
+                        type=ItemType.MATCH,
+                        stem="Empareja cada microconcepto con su descripción",
+                        options={"pairs": pairs},
+                        correct_answer=json.dumps(correct_map, ensure_ascii=False),
+                        explanation="",
+                        difficulty=1,
+                    )
+                    db.add(match_item)
+                    db.commit()
+                    logger.info("Created missing test MATCH Item")
 
         logger.info("Seeding complete!")
-        logger.info(f"Tutor ID: {user_tutor.id}")
-        logger.info(f"Student ID: {user_student.id}")
+        logger.info(f"Tutor User ID: {user_tutor.id}")
+        logger.info(f"Tutor Profile ID: {tutor_profile.id}")
+        logger.info(f"Student User ID: {user_student.id}")
+        logger.info(f"Student Profile ID: {student_profile.id}")
         logger.info(f"Subject ID: {subject.id}")
         logger.info(f"Term ID: {term.id}")
 

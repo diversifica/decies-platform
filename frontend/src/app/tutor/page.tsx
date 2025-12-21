@@ -1,19 +1,29 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import AuthPanel from '../../components/auth/AuthPanel';
 import UploadForm from '../../components/tutor/UploadForm';
 import UploadList from '../../components/tutor/UploadList';
 import MetricsDashboard from '../../components/tutor/MetricsDashboard';
 import RecommendationList from '../../components/tutor/RecommendationList';
+import TutorReportPanel from '../../components/tutor/TutorReportPanel';
+import MicroconceptManager from '../../components/tutor/MicroconceptManager';
+import RealGradesPanel from '../../components/tutor/RealGradesPanel';
+import { AuthMe } from '../../services/auth';
+import { fetchStudents, fetchSubjects, fetchTerms, StudentSummary, SubjectSummary, TermSummary } from '../../services/catalog';
 
 export default function TutorPage() {
-    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations'>('content');
+    const [activeTab, setActiveTab] = useState<'content' | 'metrics' | 'recommendations' | 'reports' | 'microconcepts' | 'grades'>('content');
 
-    // Hardcoded for MVP - from seed.py output
-    const TUTOR_ID = "a2c1b4e5-9876-4321-abcd-1234567890ab"; // Default Tuthill
-    const STUDENT_ID = "b3a2f673-4411-41bd-bf4b-f31211d90050";
-    const SUBJECT_ID = "e13cc7df-4a91-48b8-a1ef-e235cff9689d";
-    const TERM_ID = "3141b86d-162d-49b7-b34e-7c19218aa464";
+    const [me, setMe] = useState<AuthMe | null>(null);
+    const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
+    const [terms, setTerms] = useState<TermSummary[]>([]);
+    const [students, setStudents] = useState<StudentSummary[]>([]);
+
+    const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+    const [selectedTermId, setSelectedTermId] = useState<string>('');
+    const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+    const [uploadsRefreshSignal, setUploadsRefreshSignal] = useState<number>(0);
 
     const getTabStyle = (tabName: string) => ({
         padding: '0.75rem 1.5rem',
@@ -27,59 +37,230 @@ export default function TutorPage() {
         marginBottom: '-2px'
     });
 
+    const isTutor = (me?.role || '').toLowerCase() === 'tutor';
+    const tutorId = me?.tutor_id || '';
+
+    useEffect(() => {
+        const loadCatalog = async () => {
+            if (!isTutor) return;
+
+            const [subjectsData, termsData] = await Promise.all([
+                fetchSubjects(true),
+                fetchTerms(true),
+            ]);
+            setSubjects(subjectsData);
+            setTerms(termsData);
+
+            setSelectedSubjectId((prev) => prev || subjectsData[0]?.id || '');
+            setSelectedTermId((prev) => prev || termsData[0]?.id || '');
+        };
+
+        loadCatalog();
+    }, [isTutor]);
+
+    useEffect(() => {
+        const loadStudents = async () => {
+            if (!isTutor) return;
+            if (!selectedSubjectId) return;
+
+            const studentsData = await fetchStudents(true, selectedSubjectId);
+            setStudents(studentsData);
+            setSelectedStudentId((prev) => prev || studentsData[0]?.id || '');
+        };
+
+        loadStudents();
+    }, [isTutor, selectedSubjectId]);
+
     return (
         <div>
             <h2 style={{ marginBottom: '2rem', textAlign: 'center' }}>Panel del Tutor</h2>
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)' }}>
-                <button
-                    onClick={() => setActiveTab('content')}
-                    style={getTabStyle('content')}
-                >
-                    Contenido
-                </button>
-                <button
-                    onClick={() => setActiveTab('metrics')}
-                    style={getTabStyle('metrics')}
-                >
-                    Métricas y Dominio
-                </button>
-                <button
-                    onClick={() => setActiveTab('recommendations')}
-                    style={getTabStyle('recommendations')}
-                >
-                    Recomendaciones
-                </button>
-            </div>
+            <AuthPanel
+                title="Acceso Tutor"
+                defaultEmail="tutor@decies.com"
+                defaultPassword="decies"
+                onAuth={(loadedMe) => {
+                    setMe(loadedMe);
+                    setSelectedStudentId('');
+                    setUploadsRefreshSignal((v) => v + 1);
+                }}
+                onLogout={() => {
+                    setMe(null);
+                    setSubjects([]);
+                    setTerms([]);
+                    setStudents([]);
+                    setSelectedSubjectId('');
+                    setSelectedTermId('');
+                    setSelectedStudentId('');
+                    setUploadsRefreshSignal((v) => v + 1);
+                }}
+            />
 
-            {/* Content */}
-            {activeTab === 'content' && (
-                <div style={{ display: 'grid', gap: '2rem' }}>
-                    <section>
-                        <UploadForm />
-                    </section>
-                    <section>
-                        <UploadList />
-                    </section>
+            {me && !isTutor && (
+                <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--error)' }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>Acceso restringido</h3>
+                    <p style={{ margin: 0 }}>
+                        Has iniciado sesión como <strong>{(me.role || 'N/A').toUpperCase()}</strong>. Para subir y procesar contenido, inicia sesión con un usuario tutor.
+                    </p>
                 </div>
             )}
 
-            {activeTab === 'metrics' && (
-                <MetricsDashboard
-                    studentId={STUDENT_ID}
-                    subjectId={SUBJECT_ID}
-                    termId={TERM_ID}
-                />
+            {isTutor && (
+                <div className="card" style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '1rem' }}>Contexto</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                        <label>
+                            Asignatura
+                            <select className="input" value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)}>
+                                {subjects.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Trimestre
+                            <select className="input" value={selectedTermId} onChange={(e) => setSelectedTermId(e.target.value)}>
+                                {terms.map((t) => (
+                                    <option key={t.id} value={t.id}>{t.code} - {t.name}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Alumno
+                            <select className="input" value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)}>
+                                {students.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.full_name || s.email || s.id}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+                    {(!selectedStudentId || !selectedSubjectId || !selectedTermId) && (
+                        <p style={{ marginTop: '0.75rem', color: 'var(--text-secondary)' }}>
+                            Selecciona asignatura, trimestre y alumno para ver métricas, recomendaciones e informes.
+                        </p>
+                    )}
+                </div>
             )}
 
-            {activeTab === 'recommendations' && (
-                <RecommendationList
-                    studentId={STUDENT_ID}
-                    subjectId={SUBJECT_ID}
-                    termId={TERM_ID}
-                    tutorId={TUTOR_ID}
-                />
+            {isTutor && (
+                <>
+                    {/* Tabs */}
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)' }}>
+                        <button
+                            onClick={() => setActiveTab('content')}
+                            style={getTabStyle('content')}
+                        >
+                            Contenido
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('metrics')}
+                            style={getTabStyle('metrics')}
+                        >
+                            Métricas y Dominio
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('recommendations')}
+                            style={getTabStyle('recommendations')}
+                        >
+                            Recomendaciones
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('reports')}
+                            style={getTabStyle('reports')}
+                        >
+                            Informe
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('microconcepts')}
+                            style={getTabStyle('microconcepts')}
+                        >
+                            Microconceptos
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('grades')}
+                            style={getTabStyle('grades')}
+                        >
+                            Calificaciones
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    {activeTab === 'content' && (
+                        <div style={{ display: 'grid', gap: '2rem' }}>
+                            <section>
+                                <UploadForm
+                                    subjectId={selectedSubjectId}
+                                    termId={selectedTermId}
+                                    onUploadSuccess={() => setUploadsRefreshSignal((v) => v + 1)}
+                                />
+                            </section>
+                            <section>
+                                <UploadList refreshSignal={uploadsRefreshSignal} />
+                            </section>
+                        </div>
+                    )}
+
+                    {activeTab === 'metrics' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId ? (
+                            <MetricsDashboard
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver métricas.</p>
+                        )
+                    )}
+
+                    {activeTab === 'recommendations' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
+                            <RecommendationList
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                                tutorId={tutorId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver recomendaciones.</p>
+                        )
+                    )}
+
+                    {activeTab === 'reports' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId && tutorId ? (
+                            <TutorReportPanel
+                                tutorId={tutorId}
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver informes.</p>
+                        )
+                    )}
+
+                    {activeTab === 'microconcepts' && (
+                        selectedSubjectId && selectedTermId ? (
+                            <MicroconceptManager
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona asignatura y trimestre para gestionar microconceptos.</p>
+                        )
+                    )}
+
+                    {activeTab === 'grades' && (
+                        selectedStudentId && selectedSubjectId && selectedTermId ? (
+                            <RealGradesPanel
+                                studentId={selectedStudentId}
+                                subjectId={selectedSubjectId}
+                                termId={selectedTermId}
+                            />
+                        ) : (
+                            <p>Selecciona contexto para ver calificaciones.</p>
+                        )
+                    )}
+                </>
             )}
         </div>
     );
