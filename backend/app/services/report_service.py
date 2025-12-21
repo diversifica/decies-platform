@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.versioning import RECOMMENDATION_ENGINE_VERSION, RECOMMENDATION_RULESET_VERSION
 from app.models.activity import ActivitySession, ActivityType
 from app.models.grade import RealGrade
 from app.models.metric import MasteryState, MetricAggregate
@@ -16,6 +17,10 @@ from app.models.report import TutorReport, TutorReportSection
 from app.models.topic import Topic
 from app.services.metric_service import metric_service
 from app.services.recommendation_service import recommendation_service
+
+
+def _recommendation_code(rec: RecommendationInstance) -> str:
+    return rec.recommendation_code or rec.rule_id
 
 
 def _to_float(value: Any) -> float | None:
@@ -145,14 +150,20 @@ class ReportService:
         )
 
         recommendation_categories: dict[str, str] = {}
-        rec_codes = {rec.rule_id for rec in pending_recommendations}
+        recommendation_catalog_versions: dict[str, str] = {}
+        rec_codes = {_recommendation_code(rec) for rec in pending_recommendations}
         if rec_codes:
             rows = (
-                db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+                db.query(
+                    RecommendationCatalog.code,
+                    RecommendationCatalog.category,
+                    RecommendationCatalog.catalog_version,
+                )
                 .filter(RecommendationCatalog.code.in_(rec_codes))
                 .all()
             )
-            recommendation_categories.update({code: category for code, category in rows})
+            recommendation_categories.update({code: category for code, category, _v in rows})
+            recommendation_catalog_versions.update({code: v for code, _c, v in rows})
 
         accepted_recommendations = (
             db.query(RecommendationInstance)
@@ -180,14 +191,19 @@ class ReportService:
             .all()
         )
 
-        accepted_codes = {rec.rule_id for rec in accepted_recommendations}
+        accepted_codes = {_recommendation_code(rec) for rec in accepted_recommendations}
         if accepted_codes:
             rows = (
-                db.query(RecommendationCatalog.code, RecommendationCatalog.category)
+                db.query(
+                    RecommendationCatalog.code,
+                    RecommendationCatalog.category,
+                    RecommendationCatalog.catalog_version,
+                )
                 .filter(RecommendationCatalog.code.in_(accepted_codes))
                 .all()
             )
-            recommendation_categories.update({code: category for code, category in rows})
+            recommendation_categories.update({code: category for code, category, _v in rows})
+            recommendation_catalog_versions.update({code: v for code, _c, v in rows})
 
         accepted_payload: list[dict[str, Any]] = []
         with_outcome = 0
@@ -196,6 +212,7 @@ class ReportService:
         success_partial = 0
 
         for rec in accepted_recommendations:
+            code = _recommendation_code(rec)
             outcome_payload = None
             if rec.outcome:
                 with_outcome += 1
@@ -224,7 +241,11 @@ class ReportService:
                 {
                     "id": str(rec.id),
                     "rule_id": rec.rule_id,
-                    "category": recommendation_categories.get(rec.rule_id),
+                    "recommendation_code": code,
+                    "category": recommendation_categories.get(code),
+                    "catalog_version": recommendation_catalog_versions.get(code),
+                    "engine_version": rec.engine_version,
+                    "ruleset_version": rec.ruleset_version,
                     "priority": _priority_to_str(rec.priority),
                     "title": rec.title,
                     "description": rec.description,
@@ -465,6 +486,8 @@ class ReportService:
             student_id=student_id,
             subject_id=subject_id,
             term_id=term_id,
+            engine_version=RECOMMENDATION_ENGINE_VERSION,
+            ruleset_version=RECOMMENDATION_RULESET_VERSION,
             summary="\n".join(executive_lines),
             metrics_snapshot=metrics_snapshot,
             window_start=metrics.window_start,
@@ -543,7 +566,11 @@ class ReportService:
                         {
                             "id": str(rec.id),
                             "rule_id": rec.rule_id,
-                            "category": recommendation_categories.get(rec.rule_id),
+                            "recommendation_code": (code := _recommendation_code(rec)),
+                            "category": recommendation_categories.get(code),
+                            "catalog_version": recommendation_catalog_versions.get(code),
+                            "engine_version": rec.engine_version,
+                            "ruleset_version": rec.ruleset_version,
                             "priority": _priority_to_str(rec.priority),
                             "title": rec.title,
                             "description": rec.description,

@@ -23,6 +23,8 @@ class TutorReportResponse(BaseModel):
     student_id: uuid.UUID
     subject_id: uuid.UUID
     term_id: uuid.UUID
+    engine_version: str
+    ruleset_version: str
     summary: str
     metrics_snapshot: dict[str, Any] | None = None
     window_start: datetime | None = None
@@ -39,6 +41,8 @@ class TutorReportListItemResponse(BaseModel):
     student_id: uuid.UUID
     subject_id: uuid.UUID
     term_id: uuid.UUID
+    engine_version: str
+    ruleset_version: str
     summary: str
     generated_at: datetime
 
