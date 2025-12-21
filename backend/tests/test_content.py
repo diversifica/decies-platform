@@ -14,6 +14,7 @@ from app.models.subject import Subject
 from app.models.term import AcademicYear, Term
 from app.models.tutor import Tutor
 from app.models.user import User
+from app.routers.content import run_pipeline_task
 
 client = TestClient(app)
 
@@ -200,5 +201,77 @@ def test_process_upload_enqueues_when_async_enabled(db_session: Session):
             payload = process_res.json()
             assert payload["job_id"] == "job-123"
             mocked.assert_called_once()
+
+        db_session.expire_all()
+        upload = db_session.query(ContentUpload).filter_by(id=uuid.UUID(upload_id)).first()
+        assert upload is not None
+        assert upload.processing_status == "queued"
+        assert upload.processing_job_id == "job-123"
+        assert upload.processing_error is None
     finally:
         settings.ASYNC_QUEUE_ENABLED = prev
+
+
+def test_run_pipeline_task_updates_processing_status_success(db_session: Session):
+    role = db_session.query(Role).filter_by(name="tutor").first()
+    if not role:
+        role = Role(name="tutor")
+        db_session.add(role)
+        db_session.commit()
+
+    user_id = uuid.uuid4()
+    password = "pw"
+    user = User(
+        id=user_id,
+        email=f"tutor_{user_id}@test.com",
+        hashed_password=get_password_hash(password),
+        is_active=True,
+        role_id=role.id,
+    )
+    db_session.add(user)
+    db_session.flush()
+
+    tutor = Tutor(user_id=user.id, display_name="Test Tutor")
+    db_session.add(tutor)
+    db_session.flush()
+
+    ac_year = AcademicYear(
+        name=f"2025-2026-{user_id}",
+        start_date="2025-09-01",
+        end_date="2026-06-30",
+    )
+    db_session.add(ac_year)
+    db_session.flush()
+
+    term = Term(academic_year_id=ac_year.id, code="T1", name="Term 1")
+    db_session.add(term)
+
+    subject = Subject(name="Math", tutor_id=user.id)
+    db_session.add(subject)
+
+    db_session.commit()
+
+    upload = ContentUpload(
+        tutor_id=tutor.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        upload_type="pdf",
+        storage_uri="mock/path/test.pdf",
+        file_name="test.pdf",
+        mime_type="application/pdf",
+        page_count=1,
+        processing_status="queued",
+    )
+    db_session.add(upload)
+    db_session.commit()
+    upload_id = upload.id
+
+    with patch("app.routers.content.process_content_upload", return_value=None):
+        run_pipeline_task(upload_id)
+
+    db_session.expire_all()
+    refreshed = db_session.query(ContentUpload).filter_by(id=upload_id).first()
+    assert refreshed is not None
+    assert refreshed.processing_status == "succeeded"
+    assert refreshed.processing_error is None
+    assert refreshed.processed_at is not None
