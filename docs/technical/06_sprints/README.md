@@ -9,3 +9,4 @@
 - `docs/technical/06_sprints/27_Desglose_Diario_Sprint_3_V1.md`
 - `docs/technical/06_sprints/28_Runbook_E2E-03_Sprint_3_Dia_7.md`
 - `docs/technical/06_sprints/30_Runbook_E2E-05_Sprint_5_Dia_7.md`
+- `docs/technical/06_sprints/31_Runbook_E2E-06_Sprint_6_Dia_7.md`
