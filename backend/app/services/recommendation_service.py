@@ -137,6 +137,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R01",
                 title="Refuerzo General Necesario",
                 description=(
@@ -179,6 +181,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R02",
                 title=f"Consolidar: {mc_name}",
                 description=(
@@ -239,6 +243,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R03",
                 title="Repaso espaciado de microconceptos dominados",
                 description=(
@@ -260,6 +266,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R04",
                 title="Reducir carga de nuevos conceptos",
                 description=(
@@ -311,6 +319,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R06",
                 title="Reorganizar orden del trimestre",
                 description=(
@@ -343,6 +353,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R07",
                 title=f"Repetición inmediata: {mc_name}",
                 description=(
@@ -388,6 +400,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R08",
                 title="Introducir microevaluaciones frecuentes",
                 description=(
@@ -423,6 +437,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R09",
                 title="Separar conceptos confundidos",
                 description=(
@@ -448,6 +464,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R10",
                 title="Simplificar dificultad temporalmente",
                 description=(
@@ -487,6 +505,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R11",
                     title=f"Refuerzo: {mc_name}",
                     description=(
@@ -547,6 +567,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R12",
                 title="Limitar uso de pistas",
                 description=(
@@ -572,6 +594,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R13",
                     title="Sustituir repaso pasivo por práctica activa",
                     description=(
@@ -602,6 +626,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R14",
                 title="Introducir intercalado",
                 description=(
@@ -634,6 +660,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R15",
                     title="Volver a práctica bloqueada",
                     description=(
@@ -688,6 +716,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R16",
                     title="Cambiar tipo de actividad",
                     description=(
@@ -735,6 +765,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R17",
                 title=f"Aumentar ejemplos concretos: {mc_name}",
                 description=(
@@ -771,6 +803,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R18",
                 title="Introducir variabilidad controlada",
                 description=(
@@ -802,6 +836,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R19",
                     title="Añadir explicación tras error",
                     description=(
@@ -834,6 +870,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R20",
                 title="Reducir explicación anticipada",
                 description=(
@@ -918,6 +956,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R05",
                     title=f"Reforzar prerequisito: {prereq_name}",
                     description=(
@@ -964,6 +1004,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R21",
                 title="Posible Fatiga o Duda",
                 description=(
@@ -1068,6 +1110,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R33",
                     title="Etiquetado por tutor",
                     description=(
@@ -1101,6 +1145,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R31",
                     title="Ejercicios tipo examen",
                     description=(
@@ -1149,6 +1195,8 @@ class RecommendationService:
                     rec = self._create_or_get_recommendation(
                         db,
                         student_id=student_id,
+                        subject_id=subject_id,
+                        term_id=term_id,
                         rule_id="R35",
                         title=f"Priorizar conceptos clave del examen: {mc_name}",
                         description=(
@@ -1188,6 +1236,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R36",
                     title="Reducir confianza excesiva",
                     description=(
@@ -1225,6 +1275,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R32",
                     title="Revisar alineación temario",
                     description=(
@@ -1251,6 +1303,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R34",
                     title="Reforzar transferencia",
                     description=(
@@ -1309,6 +1363,8 @@ class RecommendationService:
                     rec = self._create_or_get_recommendation(
                         db,
                         student_id=student_id,
+                        subject_id=subject_id,
+                        term_id=term_id,
                         rule_id="R37",
                         title="Revisar consistencia entre sesiones",
                         description=(
@@ -1347,6 +1403,8 @@ class RecommendationService:
                     rec = self._create_or_get_recommendation(
                         db,
                         student_id=student_id,
+                        subject_id=subject_id,
+                        term_id=term_id,
                         rule_id="R38",
                         title="Activar revisión tutor–alumno",
                         description=(
@@ -1380,6 +1438,8 @@ class RecommendationService:
                     rec = self._create_or_get_recommendation(
                         db,
                         student_id=student_id,
+                        subject_id=subject_id,
+                        term_id=term_id,
                         rule_id="R40",
                         title="Reevaluar tras no mejora",
                         description=(
@@ -1418,6 +1478,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R39",
                     title="Mantener estrategia actual",
                     description=(
@@ -1499,6 +1561,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R22",
                 title="Aumentar sesiones cortas",
                 description=(
@@ -1529,6 +1593,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R23",
                 title="Introducir descansos",
                 description=(
@@ -1562,6 +1628,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R24",
                     title="Ajustar ritmo",
                     description=(
@@ -1593,6 +1661,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R25",
                     title="Añadir pausa reflexiva",
                     description=(
@@ -1624,6 +1694,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R26",
                     title="Aumentar automatización",
                     description=(
@@ -1655,6 +1727,8 @@ class RecommendationService:
                 rec = self._create_or_get_recommendation(
                     db,
                     student_id=student_id,
+                    subject_id=subject_id,
+                    term_id=term_id,
                     rule_id="R27",
                     title="Reducir volumen diario",
                     description=(
@@ -1696,6 +1770,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R28",
                 title="Incrementar volumen",
                 description=(
@@ -1733,6 +1809,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R29",
                 title="Ajustar dificultad",
                 description=(
@@ -1769,6 +1847,8 @@ class RecommendationService:
             rec = self._create_or_get_recommendation(
                 db,
                 student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
                 rule_id="R30",
                 title="Alternar días intensivos y ligeros",
                 description=(
@@ -1805,13 +1885,17 @@ class RecommendationService:
     def _create_or_get_recommendation(
         self,
         db: Session,
+        *,
         student_id: uuid.UUID,
+        subject_id: uuid.UUID,
+        term_id: uuid.UUID,
         rule_id: str,
         title: str,
         description: str,
         priority: RecommendationPriority,
         evidence: list[RecommendationEvidenceCreate],
         microconcept_id: Optional[uuid.UUID] = None,
+        topic_id: Optional[uuid.UUID] = None,
     ) -> Optional[RecommendationInstance]:
         if rule_id not in self._get_catalog_codes(db):
             raise ValueError(
@@ -1824,6 +1908,8 @@ class RecommendationService:
             db.query(RecommendationInstance)
             .filter(
                 RecommendationInstance.student_id == student_id,
+                RecommendationInstance.subject_id == subject_id,
+                RecommendationInstance.term_id == term_id,
                 RecommendationInstance.rule_id == rule_id,
                 RecommendationInstance.status == RecommendationStatus.PENDING,
                 RecommendationInstance.microconcept_id == microconcept_id,
@@ -1838,8 +1924,12 @@ class RecommendationService:
         new_rec = RecommendationInstance(
             id=uuid.uuid4(),
             student_id=student_id,
+            subject_id=subject_id,
+            term_id=term_id,
+            topic_id=topic_id,
             microconcept_id=microconcept_id,
             rule_id=rule_id,
+            recommendation_code=rule_id,
             priority=priority,
             status=RecommendationStatus.PENDING,
             title=title,

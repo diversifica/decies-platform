@@ -46,6 +46,36 @@ class RecommendationInstance(Base):
         nullable=False,
     )
 
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "subjects.id",
+            name="recommendation_instances_subject_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
+
+    term_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "terms.id",
+            name="recommendation_instances_term_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
+
+    topic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "topics.id",
+            name="recommendation_instances_topic_id_fkey",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
     # Optional: Recommendations can be specific to a microconcept, topic, subject, etc.
     microconcept_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -58,6 +88,15 @@ class RecommendationInstance(Base):
     )
 
     rule_id: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "R01", "R11"
+    recommendation_code: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey(
+            "recommendation_catalog.code",
+            name="recommendation_instances_recommendation_code_fkey",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
     priority: Mapped[RecommendationPriority] = mapped_column(
         Enum(RecommendationPriority, name="recommendation_priority", create_type=False),
         nullable=False,

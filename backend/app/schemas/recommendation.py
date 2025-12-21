@@ -46,8 +46,12 @@ class TutorDecisionResponse(TutorDecisionBase):
 
 class RecommendationInstanceBase(BaseModel):
     student_id: uuid.UUID
+    subject_id: uuid.UUID | None = None
+    term_id: uuid.UUID | None = None
+    topic_id: uuid.UUID | None = None
     microconcept_id: Optional[uuid.UUID] = None
     rule_id: str
+    recommendation_code: str | None = None
     category: Optional[str] = None
     priority: str
     status: str
