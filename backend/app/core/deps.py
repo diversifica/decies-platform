@@ -79,3 +79,11 @@ def get_current_student(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
+
+
+def get_current_admin(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    require_roles(db, current_user, {"admin"})
+    return current_user
