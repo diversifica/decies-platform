@@ -88,7 +88,8 @@ docs/01_modelo_pedagogico/
 docs/03_planificacion/
 docs/15_Presentacion_y_Pitch_del_Proyecto_V1.md
 
-# Storage
+# Storage (local dev artefacts)
 backend/storage/uploads/
-*.pdf
-!backend/storage/.gitkeep
+
+# Local tool venvs
+.ruff-venv/
