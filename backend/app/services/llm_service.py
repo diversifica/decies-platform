@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class StructureResult(BaseModel):
     summary: str
     chunks: list[str]  # Just text content for now
+    quality: dict | None = None
 
 
 class ItemResult(BaseModel):
@@ -99,17 +100,27 @@ class LLMService:
         1. Un resumen conciso (máximo 200 palabras) EN ESPAÑOL.
         2. Divide el contenido en fragmentos lógicos de conocimiento
            (máximo 500 palabras cada uno) EN ESPAÑOL.
+        3. Evalúa la calidad del resultado (señales V1):
+           - coverage: 0-1 (cuánto cubre el contenido)
+           - coherence: 0-1 (coherencia interna)
+           - hallucination_risk: low|medium|high
+           - ambiguity_risk: low|medium|high
 
         Devuelve formato JSON:
         {{
             "summary": "...",
-            "chunks": ["fragmento 1...", "fragmento 2..."]
+            "chunks": ["fragmento 1...", "fragmento 2..."],
+            "quality": {{
+                "coverage": 0.0,
+                "coherence": 0.0,
+                "hallucination_risk": "low",
+                "ambiguity_risk": "low"
+            }}
         }}
 
         Contenido:
-        {text[:20000]} 
+        {text}
         """
-        # Truncate to avoid context limit in prototype
 
         response = self.client.chat.completions.create(
             model=settings.LLM_MODEL_NAME,
@@ -128,7 +139,11 @@ class LLMService:
 
         content_str = response.choices[0].message.content
         data = json.loads(content_str)
-        return StructureResult(summary=data["summary"], chunks=data["chunks"])
+        return StructureResult(
+            summary=data["summary"],
+            chunks=data["chunks"],
+            quality=data.get("quality"),
+        )
 
     def generate_items_e4(self, chunk_text: str, quantity: int = 3) -> ItemResult:
         """
