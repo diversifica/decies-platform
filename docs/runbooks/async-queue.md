@@ -50,3 +50,9 @@ Quita `ASYNC_QUEUE_ENABLED=true` (o ponlo en `false`) y reinicia:
 docker compose -f docker-compose.dev.yml restart backend
 ```
 
+## Healthchecks (API)
+
+- Redis: `GET http://localhost:8000/health/redis`
+- Worker (solo si `ASYNC_QUEUE_ENABLED=true`): `GET http://localhost:8000/health/worker`
+
+Nota: con `ASYNC_QUEUE_ENABLED=false`, `/health/worker` responde `status=skipped`.
