@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Link from 'next/link';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -23,10 +24,10 @@ export default function RootLayout({
                             <span style={{ color: 'var(--accent-primary)' }}>DECIES</span> Platform
                         </div>
                         <div style={{ display: 'flex', gap: '1rem' }}>
-                            <a href="/" style={{ color: 'var(--text-secondary)' }}>Home</a>
-                            <a href="/tutor" style={{ color: 'var(--text-secondary)' }}>Tutor</a>
-                            <a href="/student" style={{ color: 'var(--text-secondary)' }}>Estudiante</a>
-                            <a href="/admin" style={{ color: 'var(--text-secondary)' }}>Admin</a>
+                            <Link href="/" style={{ color: 'var(--text-secondary)' }}>Home</Link>
+                            <Link href="/tutor" style={{ color: 'var(--text-secondary)' }}>Tutor</Link>
+                            <Link href="/student" style={{ color: 'var(--text-secondary)' }}>Estudiante</Link>
+                            <Link href="/admin" style={{ color: 'var(--text-secondary)' }}>Admin</Link>
                         </div>
                     </div>
                 </nav>
