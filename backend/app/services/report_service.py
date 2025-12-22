@@ -71,6 +71,48 @@ def _format_grade_entry(entry: dict[str, Any]) -> str:
     return f"- {assessment_date}: {value_label}{scale_label}{notes_label}{tags_label}"
 
 
+def fetch_feedback_entries(
+    db: Session,
+    *,
+    student_id: uuid.UUID,
+    subject_id: uuid.UUID,
+    term_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    feedback_sessions = (
+        db.query(ActivitySession, ActivityType)
+        .join(ActivityType, ActivitySession.activity_type_id == ActivityType.id)
+        .filter(
+            ActivitySession.student_id == student_id,
+            ActivitySession.subject_id == subject_id,
+            ActivitySession.term_id == term_id,
+            ActivitySession.feedback_submitted_at.is_not(None),
+        )
+        .order_by(ActivitySession.feedback_submitted_at.desc())
+        .limit(5)
+        .all()
+    )
+    entries: list[dict[str, Any]] = []
+    for session, activity_type in feedback_sessions:
+        entries.append(
+            {
+                "session_id": str(session.id),
+                "activity_type": activity_type.code,
+                "rating": session.feedback_rating,
+                "text": session.feedback_text,
+                "submitted_at": (
+                    session.feedback_submitted_at.isoformat()
+                    if session.feedback_submitted_at
+                    else None
+                ),
+            }
+        )
+    return entries
+
+
+def format_feedback_section_content(entries: list[dict[str, Any]]) -> str:
+    return "\n".join([_format_feedback_entry(e) for e in entries]) if entries else "No hay feedback registrado aún."
+
+
 class ReportService:
     def generate_student_report(
         self,
@@ -254,34 +296,12 @@ class ReportService:
                 }
             )
 
-        feedback_sessions = (
-            db.query(ActivitySession, ActivityType)
-            .join(ActivityType, ActivitySession.activity_type_id == ActivityType.id)
-            .filter(
-                ActivitySession.student_id == student_id,
-                ActivitySession.subject_id == subject_id,
-                ActivitySession.term_id == term_id,
-                ActivitySession.feedback_submitted_at.is_not(None),
-            )
-            .order_by(ActivitySession.feedback_submitted_at.desc())
-            .limit(5)
-            .all()
+        feedback_entries = fetch_feedback_entries(
+            db,
+            student_id=student_id,
+            subject_id=subject_id,
+            term_id=term_id,
         )
-        feedback_entries: list[dict[str, Any]] = []
-        for session, activity_type in feedback_sessions:
-            feedback_entries.append(
-                {
-                    "session_id": str(session.id),
-                    "activity_type": activity_type.code,
-                    "rating": session.feedback_rating,
-                    "text": session.feedback_text,
-                    "submitted_at": (
-                        session.feedback_submitted_at.isoformat()
-                        if session.feedback_submitted_at
-                        else None
-                    ),
-                }
-            )
 
         real_grades = (
             db.query(RealGrade)
@@ -613,11 +633,7 @@ class ReportService:
                 order_index=6,
                 section_type="student_feedback",
                 title="Feedback del alumno",
-                content=(
-                    "\n".join([_format_feedback_entry(e) for e in feedback_entries])
-                    if feedback_entries
-                    else "No hay feedback registrado aún."
-                ),
+                content=format_feedback_section_content(feedback_entries),
                 data={"entries": feedback_entries},
             ),
         ]

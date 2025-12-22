@@ -14,7 +14,11 @@ from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User
 from app.schemas.report import TutorReportListItemResponse, TutorReportResponse
-from app.services.report_service import report_service
+from app.services.report_service import (
+    fetch_feedback_entries,
+    format_feedback_section_content,
+    report_service,
+)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -153,6 +157,22 @@ def get_latest_student_report(
                     "If you just updated the repo, run migrations: `alembic upgrade head`."
                 ),
             ) from exc
+
+    feedback_entries = fetch_feedback_entries(
+        db,
+        student_id=student_id,
+        subject_id=subject_id,
+        term_id=term_id,
+    )
+
+    if feedback_entries and getattr(report, "sections", None):
+        section = next(
+            (s for s in report.sections if s.section_type == "student_feedback"),
+            None,
+        )
+        if section:
+            section.content = format_feedback_section_content(feedback_entries)
+            section.data = {"entries": feedback_entries}
 
     if not report:
         raise HTTPException(status_code=404, detail="No report found")
