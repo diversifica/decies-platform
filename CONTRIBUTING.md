@@ -9,6 +9,7 @@
 - `feature/*`: Nuevas funcionalidades
 - `fix/*`: Corrección de bugs
 - `docs/*`: Actualizaciones de documentación
+- `release/preprod-YYYYMMDD`: Corte de release para UAT/preprod
 
 ### 2. Seguridad y Secretos
 
@@ -81,6 +82,44 @@ git push origin feature/nombre-descriptivo
 3. Esperar CI verde ✅
 4. Esperar review y approval
 5. Merge (squash and merge preferido)
+
+## Proceso de Release (Preprod/UAT)
+
+El objetivo es tener un punto de corte de release y validar antes de producción.
+
+### 1. Corte de release (code freeze)
+
+1) Asegurar `develop` actualizado y en verde.
+2) Crear rama:
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b release/preprod-YYYYMMDD
+git push -u origin release/preprod-YYYYMMDD
+```
+
+3) Crear milestone "Release preprod YYYYMMDD" y issue de validación.
+
+### 2. UAT en rama release
+
+- Ejecutar checklist preprod: `docs/technical/05_calidad/21_Checklist_Preprod_V1.md`
+- Ejecutar runbook: `docs/runbooks/preprod-validation.md`
+- Cualquier bug se reporta con issue en la milestone y se corrige SOLO en la rama release vía PR.
+
+### 3. Go/No-Go
+
+- Go: sin blockers, checklist OK, CI verde.
+- No-Go: se siguen corrigiendo issues en release.
+
+### 4. Promoción a producción
+
+1) PR `release/preprod-YYYYMMDD` -> `main` (squash).
+2) Tag de release (p.ej. `v1.0.0`).
+3) Merge back a `develop` para alinear cambios.
+
+### 5. Regla estricta
+
+- Nunca hacer commits directos en `main` o `develop` (siempre PR).
 
 ## Estándares de Código
 
