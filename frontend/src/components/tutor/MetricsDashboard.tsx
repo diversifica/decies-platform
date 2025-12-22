@@ -9,6 +9,8 @@ interface StudentMetrics {
     term_id: string;
     accuracy: number | null;
     first_attempt_accuracy: number | null;
+    error_rate: number | null;
+    performance_consistency: number | null;
     median_response_time_ms: number | null;
     hint_rate: number | null;
     total_sessions: number;
@@ -157,6 +159,22 @@ export default function MetricsDashboard({ studentId, subjectId, termId }: Metri
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Precisión Global</p>
                     <p style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary)' }}>
                         {formatPercentage(metrics.accuracy)}
+                    </p>
+                </div>
+
+                <div className="card" style={{ textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Error Rate</p>
+                    <p style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--error)' }}>
+                        {formatPercentage(metrics.error_rate)}
+                    </p>
+                </div>
+
+                <div className="card" style={{ textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        Consistencia de rendimiento
+                    </p>
+                    <p style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+                        {formatPercentage(metrics.performance_consistency)}
                     </p>
                 </div>
 

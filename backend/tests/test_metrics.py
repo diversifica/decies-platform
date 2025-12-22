@@ -44,6 +44,8 @@ def test_get_student_metrics():
     data = response.json()
     assert "accuracy" in data
     assert "first_attempt_accuracy" in data
+    assert "error_rate" in data
+    assert "performance_consistency" in data
     assert "median_response_time_ms" in data
     assert "total_sessions" in data
     assert data["student_id"] == student_id

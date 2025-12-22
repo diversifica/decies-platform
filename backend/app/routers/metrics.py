@@ -84,12 +84,49 @@ def get_student_metrics(
         .count()
     )
 
+    error_rate = metric.error_rate
+    if error_rate is None and metric.accuracy is not None:
+        error_rate = round(1.0 - float(metric.accuracy), 4)
+
+    performance_consistency = None
+    session_rows = (
+        db.query(ActivitySession.id)
+        .filter(
+            ActivitySession.student_id == student_id,
+            ActivitySession.subject_id == subject_id,
+            ActivitySession.term_id == term_id,
+            ActivitySession.started_at >= metric.window_start,
+        )
+        .all()
+    )
+    session_ids = [row[0] for row in session_rows]
+    if session_ids:
+        events = (
+            db.query(LearningEvent.session_id, LearningEvent.is_correct)
+            .filter(LearningEvent.session_id.in_(session_ids))
+            .all()
+        )
+        by_session: dict[uuid.UUID, list[bool]] = {}
+        for sid, is_correct in events:
+            by_session.setdefault(sid, []).append(bool(is_correct))
+        per_session_acc: list[float] = []
+        for values in by_session.values():
+            if len(values) < 3:
+                continue
+            per_session_acc.append(sum(1 for v in values if v) / len(values))
+        if len(per_session_acc) >= 2:
+            mean = sum(per_session_acc) / len(per_session_acc)
+            variance = sum((x - mean) ** 2 for x in per_session_acc) / len(per_session_acc)
+            performance_consistency = round(variance**0.5, 4)
+
     return StudentMetricsSummary(
         student_id=student_id,
         subject_id=subject_id,
         term_id=term_id,
         accuracy=metric.accuracy,
         first_attempt_accuracy=metric.first_attempt_accuracy,
+        error_rate=error_rate,
+        performance_consistency=performance_consistency,
         median_response_time_ms=metric.median_response_time_ms,
         hint_rate=metric.hint_rate,
         total_sessions=total_sessions,

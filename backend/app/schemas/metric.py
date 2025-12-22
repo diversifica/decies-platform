@@ -64,6 +64,8 @@ class StudentMetricsSummary(BaseModel):
     term_id: uuid.UUID
     accuracy: float | None
     first_attempt_accuracy: float | None
+    error_rate: float | None
+    performance_consistency: float | None
     median_response_time_ms: int | None
     hint_rate: float | None
     total_sessions: int
