@@ -1,11 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_role_name, get_current_tutor
+from app.models.activity import ActivitySession
 from app.models.report import TutorReport
 from app.models.student import Student
 from app.models.subject import Subject
@@ -115,6 +117,42 @@ def get_latest_student_report(
                 "If you just updated the repo, run migrations: `alembic upgrade head`."
             ),
         ) from exc
+
+    latest_feedback_at = (
+        db.query(func.max(ActivitySession.feedback_submitted_at))
+        .filter(
+            ActivitySession.student_id == student_id,
+            ActivitySession.subject_id == subject_id,
+            ActivitySession.term_id == term_id,
+            ActivitySession.feedback_submitted_at.is_not(None),
+        )
+        .scalar()
+    )
+
+    needs_regen = False
+    if latest_feedback_at and report and report.generated_at:
+        needs_regen = latest_feedback_at > report.generated_at
+    elif latest_feedback_at and not report:
+        needs_regen = True
+
+    if needs_regen or report is None:
+        try:
+            report = report_service.generate_student_report(
+                db,
+                tutor_id=tutor_id,
+                student_id=student_id,
+                subject_id=subject_id,
+                term_id=term_id,
+                generate_recommendations=True,
+            )
+        except SQLAlchemyError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Database error generating report while refreshing feedback."
+                    "If you just updated the repo, run migrations: `alembic upgrade head`."
+                ),
+            ) from exc
 
     if not report:
         raise HTTPException(status_code=404, detail="No report found")

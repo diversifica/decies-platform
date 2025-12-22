@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -218,3 +218,35 @@ def test_generate_and_get_latest_report(db_session: Session):
     assert get_res.status_code == 200
     report = get_res.json()
     assert report["id"] == payload["id"]
+
+    later_session = ActivitySession(
+        student_id=student.id,
+        activity_type_id=quiz_type.id,
+        subject_id=subject.id,
+        term_id=term.id,
+        topic_id=None,
+        started_at=datetime.utcnow(),
+        ended_at=datetime.utcnow(),
+        status="completed",
+        device_type="web",
+        feedback_rating=4,
+        feedback_text="Pude repasar bien.",
+        feedback_submitted_at=datetime.utcnow() + timedelta(seconds=1),
+    )
+    db_session.add(later_session)
+    db_session.commit()
+
+    refreshed_res = client.get(
+        f"/api/v1/reports/students/{student.id}/latest",
+        params={"tutor_id": str(tutor.id), "subject_id": str(subject.id), "term_id": str(term.id)},
+        headers=headers,
+    )
+    assert refreshed_res.status_code == 200
+    refreshed = refreshed_res.json()
+    assert refreshed["id"] != payload["id"]
+    feedback_section = next(
+        (s for s in refreshed["sections"] if s["section_type"] == "student_feedback"),
+        None,
+    )
+    assert feedback_section is not None
+    assert "No hay feedback registrado" not in feedback_section["content"]
