@@ -102,7 +102,10 @@ def update_subject(
 ):
     subject = db.get(Subject, subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     if payload.name is None and payload.description is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nada que actualizar")
@@ -127,7 +130,10 @@ def delete_subject(
 ):
     subject = db.get(Subject, subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     if force:
         _purge_subject_dependencies(db, subject.id)
@@ -190,15 +196,29 @@ def assign_student_subject(
 
 
 def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
-    session_ids = [row.id for row in db.query(ActivitySession.id).filter(ActivitySession.subject_id == subject_id).all()]
+    session_ids = [
+        row.id
+        for row in db.query(ActivitySession.id)
+        .filter(ActivitySession.subject_id == subject_id)
+        .all()
+    ]
     if session_ids:
-        db.execute(delete(ActivitySessionItem).where(ActivitySessionItem.session_id.in_(session_ids)))
+        db.execute(
+            delete(ActivitySessionItem).where(
+                ActivitySessionItem.session_id.in_(session_ids)
+            )
+        )
     db.execute(delete(LearningEvent).where(LearningEvent.subject_id == subject_id))
     db.execute(delete(ActivitySession).where(ActivitySession.subject_id == subject_id))
     db.execute(delete(ContentUpload).where(ContentUpload.subject_id == subject_id))
     db.execute(delete(RealGrade).where(RealGrade.subject_id == subject_id))
     db.execute(delete(TutorReport).where(TutorReport.subject_id == subject_id))
-    micro_ids = [row.id for row in db.query(MicroConcept.id).filter(MicroConcept.subject_id == subject_id).all()]
+    micro_ids = [
+        row.id
+        for row in db.query(MicroConcept.id)
+        .filter(MicroConcept.subject_id == subject_id)
+        .all()
+    ]
     if micro_ids:
         db.execute(
             delete(MicroConceptPrerequisite).where(
@@ -209,9 +229,15 @@ def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
             )
         )
     db.execute(delete(MicroConcept).where(MicroConcept.subject_id == subject_id))
-    db.execute(delete(RecommendationInstance).where(RecommendationInstance.subject_id == subject_id))
+    db.execute(
+        delete(RecommendationInstance).where(
+            RecommendationInstance.subject_id == subject_id
+        )
+    )
     db.execute(delete(Topic).where(Topic.subject_id == subject_id))
-    db.query(Student).filter(Student.subject_id == subject_id).update({Student.subject_id: None}, synchronize_session="fetch")
+    db.query(Student).filter(Student.subject_id == subject_id).update(
+        {Student.subject_id: None}, synchronize_session="fetch"
+    )
 
 
 @router.get("/students", response_model=list[StudentSummary])

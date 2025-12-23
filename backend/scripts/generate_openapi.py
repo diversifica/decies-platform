@@ -9,7 +9,7 @@ backend_root = script_path.parents[1]
 project_root = backend_root.parents[1]
 sys.path.append(str(backend_root))
 
-from app.main import app
+from app.main import app  # noqa: E402
 
 
 def main() -> None:

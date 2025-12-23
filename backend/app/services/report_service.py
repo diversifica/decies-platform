@@ -110,7 +110,11 @@ def fetch_feedback_entries(
 
 
 def format_feedback_section_content(entries: list[dict[str, Any]]) -> str:
-    return "\n".join([_format_feedback_entry(e) for e in entries]) if entries else "No hay feedback registrado aún."
+    return (
+        "\n".join([_format_feedback_entry(e) for e in entries])
+        if entries
+        else "No hay feedback registrado aún."
+    )
 
 
 class ReportService:
