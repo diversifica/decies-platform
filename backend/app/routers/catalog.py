@@ -173,7 +173,10 @@ def assign_student_subject(
 ):
     subject = db.get(Subject, payload.subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     student = db.get(Student, student_id)
     if not student:
