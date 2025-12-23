@@ -42,6 +42,7 @@ class Item(Base):
     validation_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     validation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source_game: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP"), nullable=True
     )

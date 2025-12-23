@@ -6,7 +6,6 @@ from app.core.db import SessionLocal
 from app.main import app
 from app.models.student import Student
 
-
 client = TestClient(app)
 
 
@@ -52,11 +51,15 @@ def test_assign_subject_to_student():
 
 def test_assign_subject_requires_tutor():
     tutor_headers = _login("tutor@decies.com", "decies")
-    students_res = client.get("/api/v1/catalog/students", headers=tutor_headers, params={"mine": "true"})
+    students_res = client.get(
+        "/api/v1/catalog/students", headers=tutor_headers, params={"mine": "true"}
+    )
     assert students_res.status_code == 200
     student = students_res.json()[0]
 
-    subjects_res = client.get("/api/v1/catalog/subjects", headers=tutor_headers, params={"mine": "true"})
+    subjects_res = client.get(
+        "/api/v1/catalog/subjects", headers=tutor_headers, params={"mine": "true"}
+    )
     assert subjects_res.status_code == 200
     subject_id = subjects_res.json()[0]["id"]
 
@@ -71,7 +74,10 @@ def test_assign_subject_requires_tutor():
 
 def test_force_delete_subject_with_dependencies():
     headers = _login("tutor@decies.com", "decies")
-    payload = {"name": f"Subject {uuid.uuid4().hex[:6]}", "description": "Temporal con dependencias"}
+    payload = {
+        "name": f"Subject {uuid.uuid4().hex[:6]}",
+        "description": "Temporal con dependencias",
+    }
 
     response = client.post("/api/v1/catalog/subjects", json=payload, headers=headers)
     assert response.status_code == 201

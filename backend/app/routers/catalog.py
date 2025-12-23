@@ -6,19 +6,19 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_tutor
-from app.models.role import Role
 from app.models.activity import ActivitySession, ActivitySessionItem, LearningEvent
 from app.models.content import ContentUpload
+from app.models.grade import RealGrade
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
+from app.models.recommendation import RecommendationInstance
+from app.models.report import TutorReport
+from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import AcademicYear, Term
 from app.models.topic import Topic
 from app.models.tutor import Tutor
 from app.models.user import User
-from app.models.grade import RealGrade
-from app.models.recommendation import RecommendationInstance
-from app.models.report import TutorReport
 from app.schemas.catalog import (
     StudentSubjectUpdate,
     StudentSummary,
@@ -45,11 +45,7 @@ def list_terms(
     db: Session = Depends(get_db),
     _current_user: User = Depends(get_current_active_user),
 ):
-    query = (
-        db.query(Term)
-        .options(selectinload(Term.academic_year))
-        .outerjoin(Term.academic_year)
-    )
+    query = db.query(Term).options(selectinload(Term.academic_year)).outerjoin(Term.academic_year)
     if active is True:
         query = query.filter(Term.status == "active")
 
@@ -102,7 +98,10 @@ def update_subject(
 ):
     subject = db.get(Subject, subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     if payload.name is None and payload.description is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nada que actualizar")
@@ -127,7 +126,10 @@ def delete_subject(
 ):
     subject = db.get(Subject, subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     if force:
         _purge_subject_dependencies(db, subject.id)
@@ -142,9 +144,7 @@ def delete_subject(
             TutorReport,
         )
         has_dependencies = any(
-            db.query(model)
-            .filter(getattr(model, "subject_id") == subject.id)
-            .first()
+            db.query(model).filter(getattr(model, "subject_id") == subject.id).first()
             for model in dependency_models
         )
 
@@ -167,7 +167,10 @@ def assign_student_subject(
 ):
     subject = db.get(Subject, payload.subject_id)
     if not subject or subject.tutor_id != current_tutor.user_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignatura no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignatura no encontrada",
+        )
 
     student = db.get(Student, student_id)
     if not student:
@@ -190,15 +193,25 @@ def assign_student_subject(
 
 
 def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
-    session_ids = [row.id for row in db.query(ActivitySession.id).filter(ActivitySession.subject_id == subject_id).all()]
+    session_ids = [
+        row.id
+        for row in db.query(ActivitySession.id)
+        .filter(ActivitySession.subject_id == subject_id)
+        .all()
+    ]
     if session_ids:
-        db.execute(delete(ActivitySessionItem).where(ActivitySessionItem.session_id.in_(session_ids)))
+        db.execute(
+            delete(ActivitySessionItem).where(ActivitySessionItem.session_id.in_(session_ids))
+        )
     db.execute(delete(LearningEvent).where(LearningEvent.subject_id == subject_id))
     db.execute(delete(ActivitySession).where(ActivitySession.subject_id == subject_id))
     db.execute(delete(ContentUpload).where(ContentUpload.subject_id == subject_id))
     db.execute(delete(RealGrade).where(RealGrade.subject_id == subject_id))
     db.execute(delete(TutorReport).where(TutorReport.subject_id == subject_id))
-    micro_ids = [row.id for row in db.query(MicroConcept.id).filter(MicroConcept.subject_id == subject_id).all()]
+    micro_ids = [
+        row.id
+        for row in db.query(MicroConcept.id).filter(MicroConcept.subject_id == subject_id).all()
+    ]
     if micro_ids:
         db.execute(
             delete(MicroConceptPrerequisite).where(
@@ -209,9 +222,13 @@ def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
             )
         )
     db.execute(delete(MicroConcept).where(MicroConcept.subject_id == subject_id))
-    db.execute(delete(RecommendationInstance).where(RecommendationInstance.subject_id == subject_id))
+    db.execute(
+        delete(RecommendationInstance).where(RecommendationInstance.subject_id == subject_id)
+    )
     db.execute(delete(Topic).where(Topic.subject_id == subject_id))
-    db.query(Student).filter(Student.subject_id == subject_id).update({Student.subject_id: None}, synchronize_session="fetch")
+    db.query(Student).filter(Student.subject_id == subject_id).update(
+        {Student.subject_id: None}, synchronize_session="fetch"
+    )
 
 
 @router.get("/students", response_model=list[StudentSummary])
