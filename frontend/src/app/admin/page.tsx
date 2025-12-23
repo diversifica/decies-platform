@@ -6,16 +6,19 @@ import AuthPanel from "../../components/auth/AuthPanel";
 import { AuthMe } from "../../services/auth";
 import {
   AdminActivityType,
+  AdminGame,
   AdminItemSummary,
   AdminRecommendationCatalogEntry,
   fetchAdminActivityTypes,
+  fetchAdminGames,
   fetchAdminItems,
   fetchAdminRecommendationCatalog,
   updateAdminActivityType,
+  updateAdminGame,
   updateAdminRecommendationCatalog,
 } from "../../services/admin";
 
-type AdminTab = "items" | "catalog" | "activityTypes";
+type AdminTab = "items" | "catalog" | "activityTypes" | "games";
 
 function formatDate(value?: string | null): string {
   if (!value) return "";
@@ -114,11 +117,18 @@ export default function AdminPage() {
               >
                 Activity Types
               </button>
+              <button
+                style={tabStyle("games")}
+                onClick={() => setActiveTab("games")}
+              >
+                Juegos
+              </button>
             </div>
 
             {activeTab === "items" && <AdminItemsPanel />}
             {activeTab === "catalog" && <AdminCatalogPanel />}
             {activeTab === "activityTypes" && <AdminActivityTypesPanel />}
+            {activeTab === "games" && <AdminGamesPanel />}
           </div>
         </>
       )}
@@ -683,6 +693,196 @@ function AdminActivityTypesPanel() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function AdminGamesPanel() {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [games, setGames] = useState<AdminGame[]>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<{
+    code: string;
+    name: string;
+    active: boolean;
+  } | null>(null);
+
+  const load = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await fetchAdminGames();
+      setGames(data);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || "Error cargando juegos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const patchGame = async (code: string, payload: { active: boolean }) => {
+    setSaving(code);
+    setError("");
+    try {
+      await updateAdminGame(code, payload);
+      await load();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || "Error guardando cambios");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleToggle = (game: AdminGame) => {
+    // Si se está desactivando, no hay problema
+    if (game.active) {
+      patchGame(game.code, { active: false });
+      return;
+    }
+
+    // Si se está activando y no tiene contenido, mostrar modal
+    if (!game.has_content) {
+      setPendingToggle({ code: game.code, name: game.name, active: true });
+      setShowConfirmModal(true);
+      return;
+    }
+
+    // Si tiene contenido, activar directamente
+    patchGame(game.code, { active: true });
+  };
+
+  const confirmToggle = () => {
+    if (pendingToggle) {
+      patchGame(pendingToggle.code, { active: pendingToggle.active });
+    }
+    setShowConfirmModal(false);
+    setPendingToggle(null);
+  };
+
+  const cancelToggle = () => {
+    setShowConfirmModal(false);
+    setPendingToggle(null);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+        <button className="btn" onClick={load} disabled={loading}>
+          {loading ? "Cargando…" : "Refrescar"}
+        </button>
+      </div>
+
+      {error && <div style={{ color: "var(--error)", marginBottom: "1rem" }}>{error}</div>}
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border-color)" }}>
+              <th style={{ padding: "0.5rem" }}>Código</th>
+              <th style={{ padding: "0.5rem" }}>Nombre</th>
+              <th style={{ padding: "0.5rem" }}>Tipo</th>
+              <th style={{ padding: "0.5rem" }}>Activo</th>
+              <th style={{ padding: "0.5rem" }}>Contenido</th>
+              <th style={{ padding: "0.5rem" }}>Última Generación</th>
+              <th style={{ padding: "0.5rem" }}>Versiones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {games.map((game) => (
+              <tr key={game.code} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>{game.code}</td>
+                <td style={{ padding: "0.5rem" }}>{game.name}</td>
+                <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>{game.item_type}</td>
+                <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
+                  <select
+                    className="input"
+                    value={String(game.active)}
+                    onChange={() => handleToggle(game)}
+                    disabled={saving === game.code}
+                    style={{ minWidth: "80px" }}
+                  >
+                    <option value="true">Sí</option>
+                    <option value="false">No</option>
+                  </select>
+                </td>
+                <td style={{ padding: "0.5rem", whiteSpace: "nowrap", textAlign: "center" }}>
+                  {game.has_content ? (
+                    <span style={{ color: "var(--success)", fontSize: "1.2rem" }}>✓</span>
+                  ) : (
+                    <span style={{ color: "var(--warning)", fontSize: "1.2rem" }}>⚠</span>
+                  )}
+                </td>
+                <td style={{ padding: "0.5rem", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                  {game.last_processed_at ? formatDate(game.last_processed_at) : "Nunca"}
+                </td>
+                <td style={{ padding: "0.5rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  P:{game.prompt_version} / E:{game.engine_version}
+                </td>
+              </tr>
+            ))}
+            {!loading && games.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ padding: "0.75rem", color: "var(--text-secondary)" }}>
+                  No hay juegos disponibles.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal de confirmación */}
+      {showConfirmModal && pendingToggle && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={cancelToggle}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: "500px",
+              padding: "1.5rem",
+              borderLeft: "4px solid var(--warning)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: "1rem" }}>⚠ Advertencia</h3>
+            <p style={{ marginBottom: "1rem" }}>
+              El juego <strong>{pendingToggle.name}</strong> no tiene contenido generado aún.
+              Si lo activas, se generarán ítems en el próximo procesamiento de contenido.
+            </p>
+            <p style={{ marginBottom: "1.5rem", color: "var(--text-secondary)" }}>
+              ¿Estás seguro de que deseas activar este juego?
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={cancelToggle}>
+                Cancelar
+              </button>
+              <button className="btn" onClick={confirmToggle}>
+                Activar de todas formas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

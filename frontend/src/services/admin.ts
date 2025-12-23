@@ -71,3 +71,27 @@ export async function updateAdminActivityType(
   return res.data as AdminActivityType;
 }
 
+export interface AdminGame {
+  code: string;
+  name: string;
+  item_type: string;
+  active: boolean;
+  has_content: boolean;
+  last_processed_at: string | null;
+  prompt_version: string;
+  engine_version: string;
+}
+
+export async function fetchAdminGames(): Promise<AdminGame[]> {
+  const res = await api.get("/admin/games");
+  return res.data as AdminGame[];
+}
+
+export async function updateAdminGame(
+  code: string,
+  payload: { active?: boolean },
+): Promise<AdminGame> {
+  const res = await api.patch(`/admin/games/${code}`, payload);
+  return res.data as AdminGame;
+}
+
