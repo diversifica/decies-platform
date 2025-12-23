@@ -12,10 +12,10 @@ from app.core.llm_versioning import (
     LLM_ENGINE_VERSION,
     PROMPT_VERSION_E2_STRUCTURE,
     PROMPT_VERSION_E3_MAP,
-    PROMPT_VERSION_E4_ITEMS,
     PROMPT_VERSION_E5_VALIDATE,
 )
 from app.models.content import ContentUpload
+from app.models.game import Game
 from app.models.item import Item, ItemType
 from app.models.knowledge import KnowledgeChunk, KnowledgeEntry
 from app.models.llm_run import LLMRun, LLMRunStep
@@ -139,6 +139,7 @@ def _log_llm_attempt(
     knowledge_entry_id: uuid.UUID | None = None,
     knowledge_chunk_id: uuid.UUID | None = None,
     subfolder: str | None = None,
+    game_code: str | None = None,
 ) -> None:
     run = LLMRun(
         step=step,
@@ -152,6 +153,7 @@ def _log_llm_attempt(
         content_upload_id=upload_id,
         knowledge_entry_id=knowledge_entry_id,
         knowledge_chunk_id=knowledge_chunk_id,
+        game_code=game_code,
     )
     db.add(run)
 
@@ -167,6 +169,7 @@ def _call_with_retries(
     subfolder: str | None,
     knowledge_entry_id: uuid.UUID | None,
     knowledge_chunk_id: uuid.UUID | None,
+    game_code: str | None,
     fn,
 ):
     last_exc: Exception | None = None
@@ -185,6 +188,7 @@ def _call_with_retries(
                 subfolder=subfolder,
                 knowledge_entry_id=knowledge_entry_id,
                 knowledge_chunk_id=knowledge_chunk_id,
+                game_code=game_code,
             )
             return result
         except Exception as exc:  # noqa: BLE001
@@ -202,6 +206,7 @@ def _call_with_retries(
                 subfolder=subfolder,
                 knowledge_entry_id=knowledge_entry_id,
                 knowledge_chunk_id=knowledge_chunk_id,
+                game_code=game_code,
             )
     assert last_exc is not None
     raise last_exc
@@ -314,6 +319,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
                     subfolder=f"segment:{idx}",
                     knowledge_entry_id=None,
                     knowledge_chunk_id=None,
+                    game_code=None,
                     fn=lambda s=segment: llm_service.generate_structure_e2(s),
                 )
             )
@@ -383,6 +389,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
             subfolder=None,
             knowledge_entry_id=entry.id,
             knowledge_chunk_id=None,
+            game_code=None,
             fn=lambda: llm_service.map_chunks_to_microconcepts_e3(
                 microconcept_catalog=microconcept_catalog,
                 chunks_from_e2=chunks_from_e2,
@@ -408,53 +415,74 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
     except Exception as e:
         logger.error(f"E3 failed: {e}")
 
-    # 5. E4: Generate candidate items (per chunk)
-    logger.info("Running E4: Items")
+    # 5. E4: Generate candidate items (multi-game)
+    logger.info("Running E4: Items (multi-game)")
+
+    # Query active games
+    active_games = db.query(Game).filter(Game.active == True).all()  # noqa: E712
+    if not active_games:
+        logger.warning("No active games found, skipping item generation")
+        db.commit()
+        return
+
+    logger.info(f"Found {len(active_games)} active games: {[g.code for g in active_games]}")
+
     microconcept_by_id = {mc.id: mc for mc in microconcepts}
     candidate_items: list[dict] = []
 
-    for chunk in chunks:
-        try:
-            e4_result = _call_with_retries(
-                db,
-                upload_id=upload.id,
-                step=LLMRunStep.E4_ITEMS,
-                model=settings.LLM_MODEL_NAME,
-                prompt_version=PROMPT_VERSION_E4_ITEMS,
-                engine_version=LLM_ENGINE_VERSION,
-                subfolder=str(chunk.id),
-                knowledge_entry_id=entry.id,
-                knowledge_chunk_id=chunk.id,
-                fn=lambda c=chunk.content: llm_service.generate_items_e4(c, quantity=2),
-            )
+    # Iterate over each active game
+    for game in active_games:
+        logger.info(f"Generating items for game: {game.code} ({game.name})")
 
-            chunk_microconcept_id = chunk.microconcept_id or default_microconcept.id
-            microconcept = microconcept_by_id.get(chunk_microconcept_id)
-
-            microconcept_ref = {
-                "microconcept_id": str(chunk_microconcept_id) if chunk_microconcept_id else None,
-                "microconcept_code": microconcept.code if microconcept else None,
-                "microconcept_name": microconcept.name if microconcept else None,
-            }
-
-            for item_data in e4_result.items:
-                item_type = "mcq" if item_data["type"] == "multiple_choice" else "true_false"
-                candidate_items.append(
-                    {
-                        "item_type": item_type,
-                        "stem": item_data["stem"],
-                        "options": item_data.get("options"),
-                        "correct_answer": item_data["correct_answer"],
-                        "explanation": item_data.get("explanation"),
-                        "difficulty": 1.0,
-                        "microconcept_ref": microconcept_ref,
-                        "source_chunk_index": chunk.index,
-                    }
+        for chunk in chunks:
+            try:
+                # For now, we'll use the existing generate_items_e4 method
+                # In a future iteration, we could use game.prompt_template
+                # to customize the prompt per game
+                e4_result = _call_with_retries(
+                    db,
+                    upload_id=upload.id,
+                    step=LLMRunStep.E4_ITEMS,
+                    model=settings.LLM_MODEL_NAME,
+                    prompt_version=game.prompt_version,
+                    engine_version=game.engine_version,
+                    subfolder=f"{game.code}:{chunk.id}",
+                    knowledge_entry_id=entry.id,
+                    knowledge_chunk_id=chunk.id,
+                    game_code=game.code,
+                    fn=lambda c=chunk.content: llm_service.generate_items_e4(c, quantity=2),
                 )
 
-        except Exception as e:
-            logger.error(f"E4 failed for chunk {chunk.id}: {e}")
-            continue
+                chunk_microconcept_id = chunk.microconcept_id or default_microconcept.id
+                microconcept = microconcept_by_id.get(chunk_microconcept_id)
+
+                microconcept_ref = {
+                    "microconcept_id": str(chunk_microconcept_id)
+                    if chunk_microconcept_id
+                    else None,
+                    "microconcept_code": microconcept.code if microconcept else None,
+                    "microconcept_name": microconcept.name if microconcept else None,
+                }
+
+                for item_data in e4_result.items:
+                    item_type = "mcq" if item_data["type"] == "multiple_choice" else "true_false"
+                    candidate_items.append(
+                        {
+                            "item_type": item_type,
+                            "stem": item_data["stem"],
+                            "options": item_data.get("options"),
+                            "correct_answer": item_data["correct_answer"],
+                            "explanation": item_data.get("explanation"),
+                            "difficulty": 1.0,
+                            "microconcept_ref": microconcept_ref,
+                            "source_chunk_index": chunk.index,
+                            "source_game": game.code,  # NEW: Track which game generated this item
+                        }
+                    )
+
+            except Exception as e:
+                logger.error(f"E4 failed for game {game.code}, chunk {chunk.id}: {e}")
+                continue
 
     # 6. E5: Validate/filter candidate items
     logger.info("Running E5: Validate")
@@ -475,6 +503,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
             subfolder=None,
             knowledge_entry_id=entry.id,
             knowledge_chunk_id=None,
+            game_code=None,
             fn=lambda: llm_service.validate_items_e5(
                 items=candidate_items,
                 chunks_from_e2=chunks_from_e2,
@@ -567,6 +596,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
                 validation_status=status,
                 validation_reason=reason,
                 is_active=is_active,
+                source_game=candidate.get("source_game"),  # NEW: Store which game generated this
             )
             db.add(item)
 
@@ -587,6 +617,7 @@ def process_content_upload(db: Session, upload_id: uuid.UUID):
                 validation_status=None,
                 validation_reason="E5 failed",
                 is_active=True,
+                source_game=candidate.get("source_game"),  # NEW: Store which game generated this
             )
             db.add(item)
 

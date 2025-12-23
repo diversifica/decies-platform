@@ -71,6 +71,7 @@ class LLMRun(Base):
         default="V1",
         server_default=text("'V1'"),
     )
+    game_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_cost: Mapped[float] = mapped_column(default=0.0)
