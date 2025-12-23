@@ -1,36 +1,61 @@
-# Sprint 20251223 – Pipeline de Juegos Extensibles
+# Sprint 20251223 â€“ Pipeline de Juegos Extensibles
 
 ## Contexto
-Tras cerrar la release preprod y volver a develop, necesitamos arrancar un sprint orientado a que el pipeline LLM genere contenido para *todos* los juegos activos. El objetivo es que el backend, la UI de administración y el pipeline compartan una configuración de juegos activables, cada uno con su prompt, su tipo de item y su flag de activación.
+Tras cerrar la release preprod y volver a develop, necesitamos arrancar un sprint nuevo para implementar el pipeline extensible de juegos que permita generar contenido para MATCH, CLOZE y futuros juegos desde el LLM.
 
-> La propuesta se divide en issues diarios; en este documento indico qué debe contener cada uno y qué días estimados se asignan. Copia y pega en GitHub para crear los issues oficiales.
+## Issues
 
-## Issues del sprint
+### Issue 1: Day 1 â€“ Modelo Game y servicio admin
+- **GitHub**: [#156](https://github.com/diversifica/decies-platform/issues/156)
+- **PR**: [#159](https://github.com/diversifica/decies-platform/pull/159)
+- **TÃ­tulo**: Sprint 8 Day 1: Modelo Game y servicio admin
+- **Etiquetas**: `enhancement`, `backend`
+- **EstimaciÃ³n**: 1 dÃ­a
+- **Estado**: âœ… Completado
+- **DescripciÃ³n**: Crear el modelo `Game` para configurar juegos extensibles y exponer endpoints administrativos.
+- **Tareas**:
+  - [x] Crear modelo `Game` con campos: code, name, item_type, prompt_template, prompt_version, engine_version, source_hint, active, last_processed_at
+  - [x] MigraciÃ³n Alembic para tabla `games` y columna `items.source_game`
+  - [x] Schemas Pydantic `GameResponse` y `GameUpdate`
+  - [x] Servicio `GameService` con mÃ©todos: list_games, get_by_code, update, has_content
+  - [x] Endpoints admin: GET /admin/games, PATCH /admin/games/{code}
+  - [x] Seed inicial con QUIZ, MATCH, CLOZE
+- **Criterios**: migraciÃ³n sin errores, endpoints responden, verificaciÃ³n de contenido, seed funcional
 
-### 1. Day 1 – Modelo y servicios base de juegos (1 día)
-- Crear el modelo Game con campos como code, 
-ame, description, item_type, prompt_template, prompt_version, engine_version, ctive, created_at, updated_at y un marcador source_hint para la trazabilidad.
-- Añadir migración Alembic para crear la tabla y semilla inicial con los juegos existentes (QUIZ, MATCH, CLOZE, REVIEW si aplica).
-- Implementar un servicio/repositorio que liste juegos, filtre por ctive y permita cambiar la bandera de activación.
-- Añadir esquemas y DTOs para exponer la lista al admin (por ejemplo GameResponse, GameUpdate).
-- Criterios: la API devuelve todos los juegos con sus prompts y el valor ctive, y el servicio puede activar/desactivar y devuelve un error si se intenta activar sin contenido disponible.
+### Issue 2: Day 2 â€“ Extender pipeline para multi-juego
+- **GitHub**: [#157](https://github.com/diversifica/decies-platform/issues/157)
+- **TÃ­tulo**: Sprint 8 Day 2: Extender pipeline para multi-juego
+- **Etiquetas**: `enhancement`, `backend`
+- **EstimaciÃ³n**: 1 dÃ­a
+- **Dependencias**: Requiere #156
+- **DescripciÃ³n**: Modificar `process_content_upload` para iterar sobre juegos activos y generar Ã­tems con trazabilidad.
+- **Tareas**:
+  - [ ] Modificar `process_content_upload` para consultar `Game.active=True`
+  - [ ] Por cada juego, construir prompt especÃ­fico y llamar LLM
+  - [ ] Almacenar `Item.source_game` con el cÃ³digo del juego
+  - [ ] Registrar metadatos en `llm_runs` (game_code, prompt_version)
+  - [ ] Validar que QUIZ sigue funcionando
+  - [ ] Probar generaciÃ³n de MATCH (si hay prompt)
+- **Criterios**: pipeline multi-juego funcional, trazabilidad completa, sin regresiones
 
-### 2. Day 2 – Pipeline multi-juego (2 días)
-- Extender process_content_upload para iterar sobre los juegos activos y ejecutar un prompt específico por juego. El servicio LLM debe recibir el resultado del juego (game.code) para trazabilidad y Item debe incluir el campo source_game.
-- Permitir configurar prompts (texto + versión) por juego, reutilizando Game.prompt_template y Game.prompt_version. Añadir tests o fixtures que validen que cada juego invoca el LLM con el prompt correcto.
-- Garantizar que las salidas se validan con una versión común de E5 y que cada Item se guarda con el ItemType apropiado (MCQ, MATCH, CLOZE).
-- Criterios: un upload activo genera ítems para cada juego activo, se registran en llm_runs y se pueden recuperar filtrando por source_game.
+### Issue 3: Day 3 â€“ Panel admin de juegos en frontend
+- **GitHub**: [#158](https://github.com/diversifica/decies-platform/issues/158)
+- **TÃ­tulo**: Sprint 8 Day 3: Panel admin de juegos en frontend
+- **Etiquetas**: `enhancement`, `frontend`
+- **EstimaciÃ³n**: 1 dÃ­a
+- **Dependencias**: Requiere #156
+- **DescripciÃ³n**: Crear UI administrativa para gestionar juegos (activar/desactivar, ver estado).
+- **Tareas**:
+  - [ ] Crear pestaÃ±a "Juegos" en `/admin`
+  - [ ] Listar juegos con estado (activo/inactivo, Ãºltima generaciÃ³n)
+  - [ ] Toggle para activar/desactivar juegos
+  - [ ] Modal de confirmaciÃ³n si no hay contenido
+  - [ ] BotÃ³n para disparar reprocesado (opcional)
+  - [ ] Mostrar mensajes de error/Ã©xito
+- **Criterios**: el admin puede togglear cada juego, se registra la trazabilidad y se valida contenido antes de activar
 
-### 3. Day 3 – Panel admin y activación de juegos (1 día)
-- Ampliar la pestaña “Juegos” en /admin para listar los juegos (código, nombre, descripción, prompt_version, estado, contenido disponible) y poder activarlos/desactivarlos.
-- Cuando se activa un juego sin contenido, mostrar aviso y ofrecer lanzar un reprocesado del upload (trigger que llame al backend para procesar el contenido que falta).
-- Añadir endpoints GET /api/v1/admin/games, PATCH /api/v1/admin/games/{code}, POST /api/v1/admin/games/{code}/process que controlen la activación y disparen re-procesos.
-- Criterios: el admin puede togglear cada juego, se registra la trazabilidad y se confirma si hay contenido asociado; si no, el backend responde 409 con mensaje “procesar contenido primero”.
-
-## Siguientes pasos después del sprint
-1. Registrar cada issue en GitHub bajo la milestone / sprint correspondiente.
-2. Implementar el Day 1 en la rama eature/games-pipeline-day1 (ya iniciada).
-3. Avanzar con Day 2/3 siguiendo esta guía una vez el Day 1 esté terminado y revisado.
-
----
-*Cuando se creen los issues reales en GitHub, referencia este documento y enlaza cada uno con Fixes #ISSUE_NUMBER.*
+## Notas de implementaciÃ³n
+- Cada issue debe crear su propia rama desde develop siguiendo el patrÃ³n `feature/games-pipeline-dayN`
+- Cada PR debe vincular la issue correspondiente con `Fixes #NNN`
+- El Day 1 ya estÃ¡ implementado en la rama `feature/games-pipeline-day1`
+- Los Days 2 y 3 se implementarÃ¡n secuencialmente tras merge del anterior
