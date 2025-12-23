@@ -30,11 +30,13 @@ def test_get_student_metrics():
     assert "academic_year_name" in terms_res.json()[0]
     term_id = terms_res.json()[0]["id"]
 
-    # Get student directly from database (workaround for catalog/students endpoint issue)
+    # Get student directly from database by email (workaround for catalog/students endpoint issue)
     db = SessionLocal()
     try:
-        student = db.query(Student).filter_by(subject_id=subject_id).first()
-        assert student is not None, "No student found for subject"
+        user = db.query(User).filter_by(email="student@decies.com").first()
+        assert user is not None, "Student user not found"
+        student = db.query(Student).filter_by(user_id=user.id).first()
+        assert student is not None, "Student profile not found"
         student_id = str(student.id)
     finally:
         db.close()
@@ -69,11 +71,13 @@ def test_get_mastery_states():
     assert "academic_year_name" in terms_res.json()[0]
     term_id = terms_res.json()[0]["id"]
 
-    # Get student directly from database (workaround for catalog/students endpoint issue)
+    # Get student directly from database by email (workaround for catalog/students endpoint issue)
     db = SessionLocal()
     try:
-        student = db.query(Student).filter_by(subject_id=subject_id).first()
-        assert student is not None, "No student found for subject"
+        user = db.query(User).filter_by(email="student@decies.com").first()
+        assert user is not None, "Student user not found"
+        student = db.query(Student).filter_by(user_id=user.id).first()
+        assert student is not None, "Student profile not found"
         student_id = str(student.id)
     finally:
         db.close()
