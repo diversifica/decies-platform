@@ -6,19 +6,19 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.core.deps import get_current_active_user, get_current_tutor
-from app.models.role import Role
 from app.models.activity import ActivitySession, ActivitySessionItem, LearningEvent
 from app.models.content import ContentUpload
+from app.models.grade import RealGrade
 from app.models.microconcept import MicroConcept, MicroConceptPrerequisite
+from app.models.recommendation import RecommendationInstance
+from app.models.report import TutorReport
+from app.models.role import Role
 from app.models.student import Student
 from app.models.subject import Subject
 from app.models.term import AcademicYear, Term
 from app.models.topic import Topic
 from app.models.tutor import Tutor
 from app.models.user import User
-from app.models.grade import RealGrade
-from app.models.recommendation import RecommendationInstance
-from app.models.report import TutorReport
 from app.schemas.catalog import (
     StudentSubjectUpdate,
     StudentSummary,

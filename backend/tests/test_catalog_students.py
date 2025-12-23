@@ -6,7 +6,6 @@ from app.core.db import SessionLocal
 from app.main import app
 from app.models.student import Student
 
-
 client = TestClient(app)
 
 

@@ -5,9 +5,10 @@ Revises: fee3346a2bfe
 Create Date: 2025-12-23 23:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "f7c3d55b6bf7"
 down_revision = "fee3346a2bfe"
@@ -16,23 +17,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    game_item_type = postgresql.ENUM(
-        "multiple_choice",
-        "true_false",
-        "match",
-        "cloze",
-        name="game_item_type",
-        create_type=False,
-    )
-    game_item_type.create(op.get_bind(), checkfirst=True)
-
+    # Use existing item_type enum instead of creating a new one
     op.create_table(
         "games",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("code", sa.String(length=64), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("item_type", sa.Enum("multiple_choice", "true_false", "match", "cloze", name="game_item_type"), nullable=False),
+        sa.Column("item_type", postgresql.ENUM("multiple_choice", "true_false", "match", "cloze", name="item_type", create_type=False), nullable=False),
         sa.Column("prompt_template", sa.Text(), nullable=False),
         sa.Column("prompt_version", sa.String(length=32), nullable=False, server_default="V1"),
         sa.Column("engine_version", sa.String(length=32), nullable=False, server_default="V1"),
@@ -51,11 +43,3 @@ def downgrade() -> None:
     op.drop_column("items", "source_game")
     op.drop_table("games")
 
-    game_item_type = postgresql.ENUM(
-        "multiple_choice",
-        "true_false",
-        "match",
-        "cloze",
-        name="game_item_type",
-    )
-    game_item_type.drop(op.get_bind(), checkfirst=True)

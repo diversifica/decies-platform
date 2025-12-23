@@ -214,27 +214,44 @@ def seed_db():
             {
                 "code": "QUIZ",
                 "name": "Quiz de opción múltiple",
-                "description": "Items MCQ/Verdadero-Falso generados automáticamente por el pipeline LLM.",
+                "description": (
+                    "Items MCQ/Verdadero-Falso generados automáticamente "
+                    "por el pipeline LLM."
+                ),
                 "item_type": ItemType.MCQ,
-                "prompt_template": "Usa E4/E5 para generar MCQ y VF fieles al contenido. Formato JSON: { ... }",
+                "prompt_template": (
+                    "Usa E4/E5 para generar MCQ y VF fieles al contenido. "
+                    "Formato JSON: { ... }"
+                ),
                 "source_hint": "Prompt E4/E5",
                 "active": True,
             },
             {
                 "code": "MATCH",
                 "name": "Juego de emparejamiento",
-                "description": "Parejas de microconceptos y definiciones que refuerzan conexiones.",
+                "description": (
+                    "Parejas de microconceptos y definiciones que "
+                    "refuerzan conexiones."
+                ),
                 "item_type": ItemType.MATCH,
-                "prompt_template": "Genera pares left/right desde el contenido. Incluye explicaciones breves.",
+                "prompt_template": (
+                    "Genera pares left/right desde el contenido. "
+                    "Incluye explicaciones breves."
+                ),
                 "source_hint": "Prompt MATCH",
                 "active": False,
             },
             {
                 "code": "CLOZE",
                 "name": "Completar huecos",
-                "description": "Oraciones con huecos para reforzar vocabulario clave.",
+                "description": (
+                    "Oraciones con huecos para reforzar vocabulario clave."
+                ),
                 "item_type": ItemType.CLOZE,
-                "prompt_template": "Devuelve frases con placeholder y respuestas aceptables en JSON.",
+                "prompt_template": (
+                    "Devuelve frases con placeholder y respuestas "
+                    "aceptables en JSON."
+                ),
                 "source_hint": "Prompt CLOZE",
                 "active": False,
             },

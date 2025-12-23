@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.deps import get_current_admin
 from app.models.activity import ActivityType
-from app.models.game import Game
 from app.models.item import Item
 from app.models.recommendation_catalog import RecommendationCatalog
 from app.models.user import User
@@ -140,7 +139,10 @@ def update_game_state(
     if payload.active and not service.has_content(game):
         raise HTTPException(
             status_code=409,
-            detail="No hay contenido generado para este juego; procesa un upload antes de activarlo.",
+            detail=(
+                "No hay contenido generado para este juego; "
+                "procesa un upload antes de activarlo."
+            ),
         )
 
     updated = service.update(game, active=payload.active)
