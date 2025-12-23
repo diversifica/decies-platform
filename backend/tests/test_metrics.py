@@ -24,6 +24,7 @@ def test_get_student_metrics():
 
     terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
     assert terms_res.status_code == 200
+    assert "academic_year_name" in terms_res.json()[0]
     term_id = terms_res.json()[0]["id"]
 
     students_res = client.get(
@@ -61,6 +62,7 @@ def test_get_mastery_states():
 
     terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
     assert terms_res.status_code == 200
+    assert "academic_year_name" in terms_res.json()[0]
     term_id = terms_res.json()[0]["id"]
 
     students_res = client.get(
@@ -101,6 +103,7 @@ def test_recalculate_metrics():
 
     terms_res = client.get("/api/v1/catalog/terms", headers=headers, params={"active": "true"})
     assert terms_res.status_code == 200
+    assert "academic_year_name" in terms_res.json()[0]
     term_id = terms_res.json()[0]["id"]
 
     students_res = client.get(

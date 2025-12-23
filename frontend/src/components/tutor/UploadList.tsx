@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 import UploadItemsManager from './UploadItemsManager';
 
@@ -102,15 +102,32 @@ export default function UploadList({ refreshSignal }: UploadListProps) {
         fetchUploads();
     }, [fetchUploads, refreshSignal]);
 
+    const wasProcessingRef = useRef(false);
+
     useEffect(() => {
-        const shouldPoll = uploads.some((upload) => {
+        const uploadsIds = uploads.map((u) => u.id);
+        if (uploadsIds.length === 0) {
+            wasProcessingRef.current = false;
+            return undefined;
+        }
+
+        const isActive = uploads.some((upload) => {
             const state = processingById[upload.id];
             return state?.status === 'queued' || state?.status === 'running';
         });
-        if (!shouldPoll) return undefined;
+
+        if (!isActive && wasProcessingRef.current) {
+            void fetchProcessing(uploadsIds);
+        }
+
+        wasProcessingRef.current = isActive;
+
+        if (!isActive) {
+            return undefined;
+        }
 
         const handle = window.setInterval(() => {
-            fetchProcessing(uploads.map((u) => u.id));
+            fetchProcessing(uploadsIds);
         }, 5000);
         return () => window.clearInterval(handle);
     }, [fetchProcessing, uploads, processingById]);

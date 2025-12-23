@@ -1,4 +1,3 @@
-import json
 import logging
 import sys
 import uuid
@@ -11,7 +10,7 @@ from app.core.db import SessionLocal
 from app.core.security import get_password_hash
 from app.models.activity import ActivityType
 from app.models.content import ContentUpload
-from app.models.item import Item, ItemType
+from app.models.item import Item
 from app.models.microconcept import MicroConcept
 from app.models.role import Role
 from app.models.student import Student
@@ -266,144 +265,6 @@ def seed_db():
 
             if updated:
                 db.commit()
-
-        # 9. Create test ContentUpload and Items for CI tests (Day 4)
-
-        test_upload = db.query(ContentUpload).filter_by(file_name="test_upload.pdf").first()
-        if not test_upload:
-            tutor_profile = db.query(Tutor).filter_by(user_id=user_tutor.id).first()
-            if not tutor_profile:
-                logger.error("Tutor profile not found for test upload creation")
-                return
-
-            test_upload = ContentUpload(
-                id=uuid.uuid4(),
-                file_name="test_upload.pdf",
-                storage_uri="/test/test_upload.pdf",
-                mime_type="application/pdf",
-                upload_type="pdf",
-                tutor_id=tutor_profile.id,
-                subject_id=subject.id,
-                term_id=term.id,
-            )
-            db.add(test_upload)
-            db.flush()
-            logger.info("Created test ContentUpload")
-
-            # Create test items
-            first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
-            for i in range(10):
-                item = Item(
-                    id=uuid.uuid4(),
-                    content_upload_id=test_upload.id,
-                    microconcept_id=first_mc.id if first_mc else None,
-                    type=ItemType.MCQ,
-                    stem=f"Pregunta de prueba {i + 1}",
-                    options=["Opción A", "Opción B", "Opción C", "Opción D"],
-                    correct_answer="Opción A",
-                    explanation=f"Explicación de la pregunta {i + 1}",
-                    difficulty=1,
-                )
-                db.add(item)
-                logger.info(f"Created test Item {i + 1}")
-
-            cloze_item = Item(
-                id=uuid.uuid4(),
-                content_upload_id=test_upload.id,
-                microconcept_id=first_mc.id if first_mc else None,
-                type=ItemType.CLOZE,
-                stem="Completa: 2 + 2 = ____",
-                options={"placeholder": "____"},
-                correct_answer="4",
-                explanation="2 + 2 = 4.",
-                difficulty=1,
-            )
-            db.add(cloze_item)
-            logger.info("Created test CLOZE Item")
-
-            match_mcs = (
-                db.query(MicroConcept)
-                .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
-                .order_by(MicroConcept.code.asc())
-                .limit(4)
-                .all()
-            )
-            if len(match_mcs) == 4:
-                pairs = [{"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs]
-                correct_map = {p["left"]: p["right"] for p in pairs}
-                match_item = Item(
-                    id=uuid.uuid4(),
-                    content_upload_id=test_upload.id,
-                    microconcept_id=match_mcs[0].id,
-                    type=ItemType.MATCH,
-                    stem="Empareja cada microconcepto con su descripción",
-                    options={"pairs": pairs},
-                    correct_answer=json.dumps(correct_map, ensure_ascii=False),
-                    explanation="",
-                    difficulty=1,
-                )
-                db.add(match_item)
-                logger.info("Created test MATCH Item")
-
-            db.commit()
-        else:
-            existing_cloze = (
-                db.query(Item)
-                .filter(Item.content_upload_id == test_upload.id, Item.type == ItemType.CLOZE)
-                .first()
-            )
-            if not existing_cloze:
-                first_mc = db.query(MicroConcept).filter_by(code="MC-001").first()
-                cloze_item = Item(
-                    id=uuid.uuid4(),
-                    content_upload_id=test_upload.id,
-                    microconcept_id=first_mc.id if first_mc else None,
-                    type=ItemType.CLOZE,
-                    stem="Completa: 2 + 2 = ____",
-                    options={"placeholder": "____"},
-                    correct_answer="4",
-                    explanation="2 + 2 = 4.",
-                    difficulty=1,
-                )
-                db.add(cloze_item)
-                db.commit()
-                logger.info("Created missing test CLOZE Item")
-
-            existing_match = (
-                db.query(Item)
-                .filter(
-                    Item.content_upload_id == test_upload.id,
-                    Item.type == ItemType.MATCH,
-                )
-                .first()
-            )
-            if not existing_match:
-                match_mcs = (
-                    db.query(MicroConcept)
-                    .filter(MicroConcept.subject_id == subject.id, MicroConcept.term_id == term.id)
-                    .order_by(MicroConcept.code.asc())
-                    .limit(4)
-                    .all()
-                )
-                if len(match_mcs) == 4:
-                    pairs = [
-                        {"left": mc.name, "right": mc.description or mc.name} for mc in match_mcs
-                    ]
-                    correct_map = {p["left"]: p["right"] for p in pairs}
-                    match_item = Item(
-                        id=uuid.uuid4(),
-                        content_upload_id=test_upload.id,
-                        microconcept_id=match_mcs[0].id,
-                        type=ItemType.MATCH,
-                        stem="Empareja cada microconcepto con su descripción",
-                        options={"pairs": pairs},
-                        correct_answer=json.dumps(correct_map, ensure_ascii=False),
-                        explanation="",
-                        difficulty=1,
-                    )
-                    db.add(match_item)
-                    db.commit()
-                    logger.info("Created missing test MATCH Item")
 
         logger.info("Seeding complete!")
         logger.info(f"Tutor User ID: {user_tutor.id}")

@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 
@@ -45,3 +45,9 @@ class Term(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP"), nullable=True
     )
+
+    academic_year: Mapped[AcademicYear | None] = relationship("AcademicYear", lazy="joined")
+
+    @property
+    def academic_year_name(self) -> str | None:
+        return self.academic_year.name if self.academic_year else None

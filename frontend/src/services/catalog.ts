@@ -8,11 +8,22 @@ export interface SubjectSummary {
     description?: string | null;
 }
 
+export interface SubjectCreatePayload {
+    name: string;
+    description?: string | null;
+}
+
+export interface SubjectUpdatePayload {
+    name?: string;
+    description?: string | null;
+}
+
 export interface TermSummary {
     id: string;
     code: string;
     name: string;
     status: string;
+    academic_year_name?: string | null;
 }
 
 export interface StudentSummary {
@@ -34,6 +45,28 @@ export interface TopicSummary {
 export async function fetchSubjects(mine = true): Promise<SubjectSummary[]> {
     const res = await api.get('/catalog/subjects', { params: { mine } });
     return res.data as SubjectSummary[];
+}
+
+export async function createSubject(payload: SubjectCreatePayload): Promise<SubjectSummary> {
+    const res = await api.post('/catalog/subjects', payload);
+    return res.data as SubjectSummary;
+}
+
+export async function updateSubject(
+    subjectId: string,
+    payload: SubjectUpdatePayload,
+): Promise<SubjectSummary> {
+    const res = await api.put(`/catalog/subjects/${subjectId}`, payload);
+    return res.data as SubjectSummary;
+}
+
+export async function deleteSubject(subjectId: string): Promise<void> {
+    await api.delete(`/catalog/subjects/${subjectId}?force=true`);
+}
+
+export async function assignStudentSubject(studentId: string, subjectId: string): Promise<StudentSummary> {
+    const res = await api.patch(`/catalog/students/${studentId}`, { subject_id: subjectId });
+    return res.data as StudentSummary;
 }
 
 export async function fetchTerms(active: boolean | null = true): Promise<TermSummary[]> {
