@@ -45,11 +45,7 @@ def list_terms(
     db: Session = Depends(get_db),
     _current_user: User = Depends(get_current_active_user),
 ):
-    query = (
-        db.query(Term)
-        .options(selectinload(Term.academic_year))
-        .outerjoin(Term.academic_year)
-    )
+    query = db.query(Term).options(selectinload(Term.academic_year)).outerjoin(Term.academic_year)
     if active is True:
         query = query.filter(Term.status == "active")
 
@@ -148,9 +144,7 @@ def delete_subject(
             TutorReport,
         )
         has_dependencies = any(
-            db.query(model)
-            .filter(getattr(model, "subject_id") == subject.id)
-            .first()
+            db.query(model).filter(getattr(model, "subject_id") == subject.id).first()
             for model in dependency_models
         )
 
@@ -207,9 +201,7 @@ def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
     ]
     if session_ids:
         db.execute(
-            delete(ActivitySessionItem).where(
-                ActivitySessionItem.session_id.in_(session_ids)
-            )
+            delete(ActivitySessionItem).where(ActivitySessionItem.session_id.in_(session_ids))
         )
     db.execute(delete(LearningEvent).where(LearningEvent.subject_id == subject_id))
     db.execute(delete(ActivitySession).where(ActivitySession.subject_id == subject_id))
@@ -218,9 +210,7 @@ def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
     db.execute(delete(TutorReport).where(TutorReport.subject_id == subject_id))
     micro_ids = [
         row.id
-        for row in db.query(MicroConcept.id)
-        .filter(MicroConcept.subject_id == subject_id)
-        .all()
+        for row in db.query(MicroConcept.id).filter(MicroConcept.subject_id == subject_id).all()
     ]
     if micro_ids:
         db.execute(
@@ -233,9 +223,7 @@ def _purge_subject_dependencies(db: Session, subject_id: uuid.UUID) -> None:
         )
     db.execute(delete(MicroConcept).where(MicroConcept.subject_id == subject_id))
     db.execute(
-        delete(RecommendationInstance).where(
-            RecommendationInstance.subject_id == subject_id
-        )
+        delete(RecommendationInstance).where(RecommendationInstance.subject_id == subject_id)
     )
     db.execute(delete(Topic).where(Topic.subject_id == subject_id))
     db.query(Student).filter(Student.subject_id == subject_id).update(

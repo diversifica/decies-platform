@@ -24,7 +24,18 @@ def upgrade() -> None:
         sa.Column("code", sa.String(length=64), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("item_type", postgresql.ENUM("multiple_choice", "true_false", "match", "cloze", name="item_type", create_type=False), nullable=False),
+        sa.Column(
+            "item_type",
+            postgresql.ENUM(
+                "multiple_choice",
+                "true_false",
+                "match",
+                "cloze",
+                name="item_type",
+                create_type=False,
+            ),
+            nullable=False,
+        ),
         sa.Column("prompt_template", sa.Text(), nullable=False),
         sa.Column("prompt_version", sa.String(length=32), nullable=False, server_default="V1"),
         sa.Column("engine_version", sa.String(length=32), nullable=False, server_default="V1"),
@@ -32,7 +43,13 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("last_processed_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
         sa.UniqueConstraint("code", name="games_code_key"),
     )
 
@@ -42,4 +59,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("items", "source_game")
     op.drop_table("games")
-

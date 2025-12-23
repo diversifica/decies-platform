@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = '18617bb11e18'
-down_revision: str | None = ('3f5f2c9e9b71', 'f7c3d55b6bf7')
+revision: str = "18617bb11e18"
+down_revision: str | None = ("3f5f2c9e9b71", "f7c3d55b6bf7")
 branch_labels: str | None = None
 depends_on: str | None = None
 

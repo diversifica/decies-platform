@@ -140,8 +140,7 @@ def update_game_state(
         raise HTTPException(
             status_code=409,
             detail=(
-                "No hay contenido generado para este juego; "
-                "procesa un upload antes de activarlo."
+                "No hay contenido generado para este juego; procesa un upload antes de activarlo."
             ),
         )
 
