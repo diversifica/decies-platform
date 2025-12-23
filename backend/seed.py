@@ -192,16 +192,15 @@ def seed_db():
         db.commit()
 
         # Log the exact relationship for debugging
-        logger.info(f"Student-Subject Relationship Debug:")
+        logger.info("Student-Subject Relationship Debug:")
         logger.info(f"  Student ID: {student_profile.id}")
         logger.info(f"  Student user_id: {student_profile.user_id}")
         logger.info(f"  Student subject_id: {student_profile.subject_id}")
         logger.info(f"  Subject ID: {subject.id}")
         logger.info(f"  Subject tutor_id: {subject.tutor_id}")
         logger.info(f"  Tutor User ID: {user_tutor.id}")
-        logger.info(
-            f"  Relationship valid: {student_profile.subject_id == subject.id and subject.tutor_id == user_tutor.id}"
-        )
+        is_valid = student_profile.subject_id == subject.id and subject.tutor_id == user_tutor.id
+        logger.info(f"  Relationship valid: {is_valid}")
 
         # 6. Create Activity Types (Day 4)
         activity_types_data = [
