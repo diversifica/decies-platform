@@ -18,7 +18,7 @@ class Game(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     item_type: Mapped[ItemType] = mapped_column(
-        Enum(ItemType, name="game_item_type", create_type=False), nullable=False
+        Enum(ItemType, name="item_type", create_type=False), nullable=False
     )
     prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False, default="V1")
