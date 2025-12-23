@@ -209,7 +209,7 @@ def seed_db():
 
         db.commit()
 
-        # 8. Create Game configuration entries for pipeline
+        # 6. Create Game configuration entries for pipeline
         game_templates = [
             {
                 "code": "QUIZ",
