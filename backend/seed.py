@@ -10,7 +10,8 @@ from app.core.db import SessionLocal
 from app.core.security import get_password_hash
 from app.models.activity import ActivityType
 from app.models.content import ContentUpload
-from app.models.item import Item
+from app.models.game import Game
+from app.models.item import Item, ItemType
 from app.models.microconcept import MicroConcept
 from app.models.role import Role
 from app.models.student import Student
@@ -205,6 +206,57 @@ def seed_db():
                 activity_type = ActivityType(id=uuid.uuid4(), code=code, name=name, active=True)
                 db.add(activity_type)
                 logger.info(f"Created ActivityType: {code}")
+
+        db.commit()
+
+        # 8. Create Game configuration entries for pipeline
+        game_templates = [
+            {
+                "code": "QUIZ",
+                "name": "Quiz de opción múltiple",
+                "description": "Items MCQ/Verdadero-Falso generados automáticamente por el pipeline LLM.",
+                "item_type": ItemType.MCQ,
+                "prompt_template": "Usa E4/E5 para generar MCQ y VF fieles al contenido. Formato JSON: { ... }",
+                "source_hint": "Prompt E4/E5",
+                "active": True,
+            },
+            {
+                "code": "MATCH",
+                "name": "Juego de emparejamiento",
+                "description": "Parejas de microconceptos y definiciones que refuerzan conexiones.",
+                "item_type": ItemType.MATCH,
+                "prompt_template": "Genera pares left/right desde el contenido. Incluye explicaciones breves.",
+                "source_hint": "Prompt MATCH",
+                "active": False,
+            },
+            {
+                "code": "CLOZE",
+                "name": "Completar huecos",
+                "description": "Oraciones con huecos para reforzar vocabulario clave.",
+                "item_type": ItemType.CLOZE,
+                "prompt_template": "Devuelve frases con placeholder y respuestas aceptables en JSON.",
+                "source_hint": "Prompt CLOZE",
+                "active": False,
+            },
+        ]
+
+        for data in game_templates:
+            existing = db.query(Game).filter_by(code=data["code"]).first()
+            if not existing:
+                game = Game(
+                    id=uuid.uuid4(),
+                    code=data["code"],
+                    name=data["name"],
+                    description=data["description"],
+                    item_type=data["item_type"],
+                    prompt_template=data["prompt_template"],
+                    prompt_version="V1",
+                    engine_version="V1",
+                    source_hint=data["source_hint"],
+                    active=data["active"],
+                )
+                db.add(game)
+                logger.info(f"Created Game: {game.code}")
 
         db.commit()
 

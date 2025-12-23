@@ -25,6 +25,7 @@ class ItemResponse(ItemBase):
     content_upload_id: uuid.UUID
     microconcept_id: uuid.UUID | None = None
     is_active: bool = True
+    source_game: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
